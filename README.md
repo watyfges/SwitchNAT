@@ -4,7 +4,13 @@
 
 > 实验性、非官方、无 Root 的 Nintendo Switch Android 热点网络转发工具。
 
-SwitchNAT 让连接到 Android 手机热点的 Nintendo Switch 通过自备 Shadowsocks 节点转发 TCP 和 UDP 流量。它不是通用 VPN，而是在普通 Android 应用权限范围内探索 Switch 联机、NAT 映射和动态 P2P endpoint 的可行实现。
+SwitchNAT 是一款开源、可自建的 Nintendo Switch 游戏加速器，面向拥有 VPS、自建 Shadowsocks 节点，或者希望研究自建游戏加速线路的用户。
+
+无需 Root，也不需要额外的软路由。只需让 Switch 连接 Android 手机热点，SwitchNAT 就能将 TCP 和 UDP 流量通过你自己的 Shadowsocks 节点转发。
+
+除了基础流量转发，SwitchNAT 还针对 Switch 联机中的 UDP 和 P2P 场景提供动态玩家 endpoint 学习、UDP session 复用、STUN/NAT 行为检测、实时流量统计与诊断日志。
+
+如果你已经有一台服务器或 Shadowsocks 节点，想尝试摆脱商业加速器订阅、搭建自己的 Switch 联机线路，SwitchNAT 就是为这个场景准备的。
 
 ## 项目简介
 
