@@ -76,4 +76,23 @@ class ShadowsocksConfigTest {
 
         assertTrue(config.validate().any { it.contains("UDP target") })
     }
+
+    @Test
+    fun acceptsVlessRealityWithoutShadowsocksPassword() {
+        val config = ShadowsocksConfig(
+            protocol = ShadowsocksConfig.PROTOCOL_VLESS_REALITY,
+            serverHost = "vless.example.com",
+            serverPort = 443,
+            password = "",
+            method = "aes-128-gcm",
+            httpProxyPort = 7890,
+            uuid = "d342d11e-d424-4583-b36e-524ab1f0afa4",
+            serverName = "www.example.com",
+            realityPublicKey = "public-key",
+            realityShortId = "0123abcd"
+        )
+
+        assertTrue(config.validate().isEmpty())
+        assertTrue(config.isVlessReality)
+    }
 }

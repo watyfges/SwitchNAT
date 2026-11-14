@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/service_status.dart';
 
 class StatusScreen extends StatelessWidget {
@@ -13,7 +14,9 @@ class StatusScreen extends StatelessWidget {
       stream: statusStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text('Status unavailable: ${snapshot.error}'));
+          return Center(
+            child: Text('${context.tr('Status')}: ${snapshot.error}'),
+          );
         }
         final status =
             snapshot.data ?? ServiceStatus.fromJson(const <Object?, Object?>{});
@@ -26,65 +29,68 @@ class StatusScreen extends StatelessWidget {
               children: <Widget>[
                 _StateBanner(state: status.state),
                 const SizedBox(height: 24),
-                _SectionTitle(title: 'Connection'),
+                _SectionTitle(title: context.tr('Connection')),
                 _KeyValueRow(
-                  label: 'Hotspot gateway',
+                  label: context.tr('Hotspot gateway'),
                   value: status.hotspotGateway,
                 ),
                 _KeyValueRow(
-                  label: 'Proxy address',
+                  label: context.tr('Proxy address'),
                   value: status.switchProxyAddress,
                 ),
-                _KeyValueRow(label: 'Switch IP', value: status.learnedSwitchIp),
-                const SizedBox(height: 22),
-                _SectionTitle(title: 'Traffic'),
                 _KeyValueRow(
-                  label: 'UDP packets read',
+                  label: context.tr('Switch IP'),
+                  value: status.learnedSwitchIp,
+                ),
+                const SizedBox(height: 22),
+                _SectionTitle(title: context.tr('Traffic')),
+                _KeyValueRow(
+                  label: context.tr('UDP packets read'),
                   value: '${status.udpRead}',
                 ),
                 _KeyValueRow(
-                  label: 'UDP packets matched',
+                  label: context.tr('UDP packets matched'),
                   value: '${status.udpAccepted}',
                 ),
                 _KeyValueRow(
-                  label: 'UDP requests relayed',
+                  label: context.tr('UDP requests relayed'),
                   value: '${status.udpSent}',
                 ),
                 _KeyValueRow(
-                  label: 'UDP replies received',
+                  label: context.tr('UDP replies received'),
                   value: '${status.udpReceived}',
                 ),
                 _KeyValueRow(
-                  label: 'UDP replies returned',
+                  label: context.tr('UDP replies returned'),
                   value: '${status.udpWritten}',
                 ),
                 _KeyValueRow(
-                  label: 'Active UDP mappings',
+                  label: context.tr('Active UDP mappings'),
                   value: '${status.activeMappings}',
                 ),
                 _KeyValueRow(
-                  label: 'Active relay flows',
+                  label: context.tr('Active relay flows'),
                   value: '${status.activeUdpFlows}',
                 ),
                 _KeyValueRow(
-                  label: 'Active P2P aliases',
+                  label: context.tr('Active P2P aliases'),
                   value: '${status.activePeerAliases}',
                 ),
                 _KeyValueRow(
-                  label: 'Aliases created',
+                  label: context.tr('Aliases created'),
                   value: '${status.peerAliasesCreated}',
                 ),
                 _KeyValueRow(
-                  label: 'Aliases expired',
+                  label: context.tr('Aliases expired'),
                   value: '${status.peerAliasesExpired}',
                 ),
                 _KeyValueRow(
-                  label: 'TCP connections',
+                  label: context.tr('TCP connections'),
                   value: '${status.tcpConnections}',
                 ),
                 if (status.lastError.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 22),
-                  _SectionTitle(title: 'Latest error'),
+                  _SectionTitle(title: context.tr('Latest error')),
                   Text(
                     status.lastError,
                     style: TextStyle(
@@ -148,7 +154,7 @@ class _StateBanner extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              _stateLabel(state),
+              _stateLabel(context, state),
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(color: foreground),
@@ -159,14 +165,15 @@ class _StateBanner extends StatelessWidget {
     );
   }
 
-  String _stateLabel(VpnRunState state) => switch (state) {
-    VpnRunState.stopped => 'Stopped',
-    VpnRunState.permissionNeeded => 'VPN permission required',
-    VpnRunState.starting => 'Starting',
-    VpnRunState.running => 'Running',
-    VpnRunState.stopping => 'Stopping',
-    VpnRunState.failed => 'Failed',
-  };
+  String _stateLabel(BuildContext context, VpnRunState state) =>
+      switch (state) {
+        VpnRunState.stopped => context.tr('Stopped'),
+        VpnRunState.permissionNeeded => context.tr('VPN permission required'),
+        VpnRunState.starting => context.tr('Starting'),
+        VpnRunState.running => context.tr('Running'),
+        VpnRunState.stopping => context.tr('Stopping'),
+        VpnRunState.failed => context.tr('Failed'),
+      };
 }
 
 class _SectionTitle extends StatelessWidget {

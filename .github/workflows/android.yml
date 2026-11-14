@@ -1,0 +1,93 @@
+name: Android CI and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.6"
+          channel: stable
+          cache: true
+
+      - name: Fetch pinned Xray core
+        run: bash scripts/fetch_xray_core.sh
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --rerun-tasks
+
+      - name: Build release APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Name APK
+        id: apk
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME}"
+          else
+            version="${GITHUB_SHA::7}"
+          fi
+          output_dir="build/release-apks"
+          mkdir -p "${output_dir}"
+          for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+            abi="${apk#build/app/outputs/flutter-apk/app-}"
+            abi="${abi%-release.apk}"
+            cp "${apk}" "${output_dir}/SwitchNAT-${version}-${abi}.apk"
+          done
+          echo "path=${output_dir}/*.apk" >> "${GITHUB_OUTPUT}"
+          echo "name=SwitchNAT-${version}" >> "${GITHUB_OUTPUT}"
+          sha256sum "${output_dir}"/*.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Upload APK to GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

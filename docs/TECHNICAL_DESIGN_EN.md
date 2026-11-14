@@ -6,12 +6,12 @@ This document describes the current <code>master</code> implementation boundary.
 
 ## 1. Goals and Non-Goals
 
-SwitchNAT provides two Shadowsocks egress paths for a Nintendo Switch connected to an Android hotspot, without root or privileged system APIs:
+SwitchNAT provides two node-egress paths for a Nintendo Switch connected to an Android hotspot, without root or privileged system APIs. A node can use Shadowsocks or VLESS + Reality:
 
 - A manually configured HTTP proxy for TCP.
 - Android VpnService, local UDP endpoints, and dynamic aliases for selected UDP traffic.
 
-The design focuses on keeping one Shadowsocks UDP association for a Switch source port and continuing that association when P2P player endpoints change.
+The design focuses on keeping one UDP relay association for a Switch source port and continuing that association when P2P player endpoints change.
 
 Current non-goals include:
 
@@ -33,9 +33,9 @@ flowchart LR
     HTTP["HttpConnectProxy"]
     VPN["VpnService + fixed UDP endpoints"]
     ALIAS["Dynamic UDP aliases"]
-    SSTCP["Shadowsocks TCP"]
-    SSUDP["Shadowsocks UDP session"]
-    SERVER["Shadowsocks server"]
+    SSTCP["SS TCP / VLESS Reality"]
+    SSUDP["SS UDP / VLESS UoT session"]
+    SERVER["Proxy server"]
     DEST["Nintendo services / P2P peers"]
 
     NS --> HOTSPOT
@@ -55,8 +55,8 @@ Primary boundaries:
 - Flutter: <code>AppController</code>, four screens, configuration models, and status models.
 - Platform bridge: <code>NativeBridge</code> and <code>MethodChannelConfigStore</code>.
 - Android service: <code>SwitchNatVpnService</code>.
-- TCP: <code>HttpConnectProxy</code> and <code>ShadowsocksTcpClient</code>.
-- UDP: <code>LocalUdpEndpointProxy</code>, <code>UdpPeerAliasManager</code>, and <code>ShadowsocksUdpClient</code>.
+- TCP: <code>HttpConnectProxy</code>, <code>ShadowsocksTcpClient</code>, or a local Xray SOCKS5 outbound.
+- UDP: <code>LocalUdpEndpointProxy</code>, <code>UdpPeerAliasManager</code>, <code>ShadowsocksUdpClient</code>, or an Xray SOCKS5 UDP association.
 - Diagnostics: <code>Diagnostics</code>, <code>ConnectionDiagnosticsCoordinator</code>, the TCP probe, and the STUN probe.
 
 ## 3. Configuration and Control Flow
@@ -66,13 +66,13 @@ Flutter uses two channels:
 - <code>dev.switchnat.app/control</code> requests VPN/notification permissions, loads or saves configuration, starts or stops the service, and runs diagnostics.
 - <code>dev.switchnat.app/status</code> continuously publishes <code>DiagnosticsSnapshot</code>.
 
-<code>ProfileRepository</code> stores a schema-version-1 profile library in app-private SharedPreferences. The library contains:
+<code>ProfileRepository</code> stores a schema-version-2 profile library in app-private SharedPreferences and can read version 1. The library contains:
 
-- One or more Shadowsocks profiles.
+- One or more Shadowsocks/VLESS Reality profiles.
 - The selected profile ID.
 - A global shared STUN server list.
 
-A profile contains host, port, password, AEAD method, HTTP proxy port, and UDP targets. First launch creates a blank profile with bundled UDP targets and four default STUN endpoints. Legacy single-node settings are migrated into the profile library.
+A profile contains the protocol, host, port, HTTP proxy port, UDP targets, and protocol-specific fields. Shadowsocks uses a password and AEAD method. VLESS Reality uses UUID, flow, SNI, Reality public key, short ID, fingerprint, and spider path. First launch creates a blank profile with bundled UDP targets and four default STUN endpoints. Legacy single-node settings are migrated into the profile library.
 
 The active profile ID is recorded in the diagnostic session. Selecting another profile while the service is running marks a pending change in the UI but does not replace live sockets. The service must be stopped and restarted.
 
@@ -82,7 +82,7 @@ Startup order:
 
 1. Flutter validates the selected profile and requests notification and VPN permissions.
 2. Android starts <code>SwitchNatVpnService</code> as a foreground service and enters <code>starting</code>.
-3. The service resolves the Shadowsocks host, detects the hotspot gateway, and expands UDP targets.
+3. The service resolves the node host, detects the hotspot gateway, and expands UDP targets.
 4. VpnService Builder adds <code>10.88.0.2/32</code>, DNS <code>1.1.1.1</code>, and MTU 1500.
 5. Every fixed UDP target IP is registered with <code>addAddress(ip, 32)</code> and <code>addRoute(ip, 32)</code>.
 6. After establishing TUN, the service starts the HTTP proxy and fixed UDP endpoint proxy.
@@ -153,6 +153,10 @@ Both Shadowsocks UDP and TCP sockets call <code>VpnService.protect()</code>. Sup
 - aes-256-gcm
 - chacha20-ietf-poly1305
 
+VLESS + Reality nodes use a pinned AndroidLibXrayLite/Xray Core outbound. <code>XrayCoreRuntime</code> starts a SOCKS5 inbound bound only to <code>127.0.0.1</code>. <code>Socks5TcpClient</code> uses CONNECT and <code>Socks5UdpClient</code> uses UDP ASSOCIATE. Reality uses RAW transport, SNI, fingerprint, short ID, and the current Xray <code>password</code> field (the Reality public key shown by the UI). UDP uses native VLESS UoT. Mux/XUDP is not forced because of compatibility risk around concurrent Vision XUDP sessions.
+
+The Xray AAR is not committed to Git. <code>scripts/fetch_xray_core.sh</code> downloads a pinned official AndroidLibXrayLite release and verifies its SHA-256 checksum. Both local builds and GitHub Actions run it before Gradle compilation.
+
 ## 9. STUN Diagnostics
 
 After the service reaches running, <code>ConnectionDiagnosticsCoordinator</code> uses two workers to run the TCP and NAT probes in parallel. Tapping a Home status card cancels the previous probe of that type and starts a new generation, preventing a stale result from replacing a newer one.
@@ -166,7 +170,7 @@ The UI exposes Full Cone, Restricted Cone, Port-Restricted Cone, and Symmetric l
 
 A basic Binding response without enough attributes for behavior classification produces a partial result. No response from all servers produces unavailable.
 
-The result describes **UDP mapping/filtering behavior at the Shadowsocks egress**. It is not the carrier NAT on the phone and is not the NAT grade from the Switch system connection test.
+The result describes **UDP mapping/filtering behavior at the selected node egress**. It is not the carrier NAT on the phone and is not the NAT grade from the Switch system connection test.
 
 ## 10. Android Live Updates
 
@@ -266,4 +270,6 @@ Physical-device verification checks hotspot gateway, Switch proxy, connection te
 - Fixed UDP proxy: <code>android/app/src/main/kotlin/dev/switchnat/app/udp/LocalUdpEndpointProxy.kt</code>
 - Dynamic aliases: <code>android/app/src/main/kotlin/dev/switchnat/app/udp/UdpPeerAliasManager.kt</code>
 - Shadowsocks clients: <code>android/app/src/main/kotlin/dev/switchnat/app/ss/</code>
+- VLESS/Xray adapter: <code>android/app/src/main/kotlin/dev/switchnat/app/xray/</code>
+- CI release workflow: <code>.github/workflows/android.yml</code>
 - Diagnostics/STUN: <code>android/app/src/main/kotlin/dev/switchnat/app/diagnostics/</code>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/profile_library.dart';
 import '../config/ss_config.dart';
+import '../l10n/app_strings.dart';
 import '../state/app_controller.dart';
 
 class ConfigScreen extends StatefulWidget {
@@ -17,6 +18,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
   final password = TextEditingController();
   final proxyPort = TextEditingController();
   final targets = TextEditingController();
+  final uuid = TextEditingController();
+  final serverName = TextEditingController();
+  final publicKey = TextEditingController();
+  final shortId = TextEditingController();
+  final flow = TextEditingController();
+  final fingerprint = TextEditingController();
+  final spiderX = TextEditingController();
+  String protocol = SsConfig.protocolShadowsocks;
   String method = 'aes-128-gcm';
   String loadedId = '';
   bool showTargets = false;
@@ -29,6 +38,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
     password.dispose();
     proxyPort.dispose();
     targets.dispose();
+    uuid.dispose();
+    serverName.dispose();
+    publicKey.dispose();
+    shortId.dispose();
+    flow.dispose();
+    fingerprint.dispose();
+    spiderX.dispose();
     super.dispose();
   }
 
@@ -41,6 +57,14 @@ class _ConfigScreenState extends State<ConfigScreen> {
     password.text = profile.config.password;
     proxyPort.text = '${profile.config.httpProxyPort}';
     targets.text = profile.config.udpTargets;
+    uuid.text = profile.config.uuid;
+    serverName.text = profile.config.serverName;
+    publicKey.text = profile.config.realityPublicKey;
+    shortId.text = profile.config.realityShortId;
+    flow.text = profile.config.flow;
+    fingerprint.text = profile.config.fingerprint;
+    spiderX.text = profile.config.spiderX;
+    protocol = profile.config.protocol;
     method = profile.config.method;
   }
 
@@ -48,6 +72,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: widget.controller,
     builder: (context, _) {
+      final strings = context.strings;
       _sync();
       final library = widget.controller.library;
       if (library == null) {
@@ -62,7 +87,10 @@ class _ConfigScreenState extends State<ConfigScreen> {
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: <Widget>[
-          Text('Node settings', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            context.tr('Node settings'),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 12),
           Card(
             key: const Key('profile-summary'),
@@ -89,22 +117,22 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         ? null
                         : widget.controller.createProfile,
                     icon: const Icon(Icons.add),
-                    label: const Text('New'),
+                    label: Text(context.tr('New')),
                   ),
                   PopupMenuButton<_ProfileAction>(
-                    tooltip: 'More node actions',
+                    tooltip: context.tr('More node actions'),
                     enabled: !widget.controller.busy,
                     onSelected: (action) =>
                         _runProfileAction(action, profile, library),
                     itemBuilder: (_) => <PopupMenuEntry<_ProfileAction>>[
-                      const PopupMenuItem<_ProfileAction>(
+                      PopupMenuItem<_ProfileAction>(
                         value: _ProfileAction.rename,
-                        child: Text('Rename'),
+                        child: Text(context.tr('Rename')),
                       ),
                       PopupMenuItem<_ProfileAction>(
                         value: _ProfileAction.delete,
                         enabled: library.profiles.length > 1,
-                        child: const Text('Delete'),
+                        child: Text(context.tr('Delete')),
                       ),
                     ],
                   ),
@@ -113,9 +141,29 @@ class _ConfigScreenState extends State<ConfigScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          Text('Shadowsocks', style: Theme.of(context).textTheme.titleMedium),
+          DropdownButtonFormField<String>(
+            key: ValueKey<String>('protocol-$loadedId'),
+            initialValue: protocol,
+            decoration: _fieldDecoration(context.tr('Protocol')),
+            items: const <DropdownMenuItem<String>>[
+              DropdownMenuItem(
+                value: SsConfig.protocolShadowsocks,
+                child: Text('Shadowsocks'),
+              ),
+              DropdownMenuItem(
+                value: SsConfig.protocolVlessReality,
+                child: Text('VLESS + Reality'),
+              ),
+            ],
+            onChanged: (value) => setState(
+              () => protocol = value ?? SsConfig.protocolShadowsocks,
+            ),
+          ),
           const SizedBox(height: 10),
-          TextField(controller: host, decoration: _fieldDecoration('Host')),
+          TextField(
+            controller: host,
+            decoration: _fieldDecoration(context.tr('Host')),
+          ),
           const SizedBox(height: 10),
           Row(
             children: <Widget>[
@@ -123,7 +171,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 child: TextField(
                   controller: port,
                   keyboardType: TextInputType.number,
-                  decoration: _fieldDecoration('Port'),
+                  decoration: _fieldDecoration(context.tr('Port')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -131,47 +179,83 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 child: TextField(
                   controller: proxyPort,
                   keyboardType: TextInputType.number,
-                  decoration: _fieldDecoration('Proxy port'),
+                  decoration: _fieldDecoration(context.tr('Proxy port')),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          TextField(
-            controller: password,
-            obscureText: true,
-            decoration: _fieldDecoration('Password'),
-          ),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            key: ValueKey<String>('method-$loadedId'),
-            initialValue: method,
-            isExpanded: true,
-            decoration: _fieldDecoration('Encryption'),
-            items: SsConfig.supportedMethods
-                .map(
-                  (value) => DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          if (protocol == SsConfig.protocolShadowsocks) ...<Widget>[
+            TextField(
+              controller: password,
+              obscureText: true,
+              decoration: _fieldDecoration(context.tr('Password')),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              key: ValueKey<String>('method-$loadedId'),
+              initialValue: method,
+              isExpanded: true,
+              decoration: _fieldDecoration(context.tr('Encryption')),
+              items: SsConfig.supportedMethods
+                  .map(
+                    (value) => DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
                     ),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => method = value ?? method),
-          ),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => method = value ?? method),
+            ),
+          ] else ...<Widget>[
+            TextField(
+              controller: uuid,
+              decoration: _fieldDecoration(context.tr('UUID')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: serverName,
+              decoration: _fieldDecoration(context.tr('Server name (SNI)')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: publicKey,
+              decoration: _fieldDecoration(context.tr('Reality public key')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: shortId,
+              decoration: _fieldDecoration(context.tr('Reality short ID')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: flow,
+              decoration: _fieldDecoration(context.tr('Flow')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: fingerprint,
+              decoration: _fieldDecoration(context.tr('Fingerprint')),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: spiderX,
+              decoration: _fieldDecoration(context.tr('Spider path')),
+            ),
+          ],
           const SizedBox(height: 18),
-          Text('Advanced', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            context.tr('Advanced'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: <Widget>[
                 ListTile(
                   dense: true,
-                  title: const Text('UDP target rules'),
-                  subtitle: Text('$ruleCount rules'),
+                  title: Text(context.tr('UDP target rules')),
+                  subtitle: Text(strings.rules(ruleCount)),
                   trailing: Icon(
                     showTargets ? Icons.expand_less : Icons.expand_more,
                   ),
@@ -185,8 +269,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
                       minLines: 8,
                       maxLines: 14,
                       decoration: _fieldDecoration(
-                        'UDP targets',
-                        helperText: 'IPv4:port or IPv4/prefix:port',
+                        context.tr('UDP targets'),
+                        helperText: context.tr('IPv4:port or IPv4/prefix:port'),
                       ),
                     ),
                   ),
@@ -199,8 +283,8 @@ class _ConfigScreenState extends State<ConfigScreen> {
               children: <Widget>[
                 ListTile(
                   dense: true,
-                  title: const Text('STUN servers'),
-                  subtitle: Text('${library.stunServers.length} servers'),
+                  title: Text(context.tr('STUN servers')),
+                  subtitle: Text(strings.servers(library.stunServers.length)),
                   trailing: Icon(
                     showStun ? Icons.expand_less : Icons.expand_more,
                   ),
@@ -212,7 +296,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     child: TextButton.icon(
                       onPressed: () => _editStun(library),
                       icon: const Icon(Icons.add),
-                      label: const Text('Add server'),
+                      label: Text(context.tr('Add server')),
                     ),
                   ),
                   for (final server in library.stunServers)
@@ -225,7 +309,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       secondary: IconButton(
-                        tooltip: 'Edit STUN server',
+                        tooltip: context.tr('Edit STUN server'),
                         onPressed: () => _editStun(library, server),
                         icon: const Icon(Icons.edit_outlined),
                       ),
@@ -247,7 +331,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
           FilledButton.icon(
             onPressed: widget.controller.busy ? null : () => _save(profile),
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Save changes'),
+            label: Text(context.tr('Save changes')),
           ),
         ],
       );
@@ -268,7 +352,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Text(
-                'Select node',
+                context.tr('Select node'),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -303,12 +387,17 @@ class _ConfigScreenState extends State<ConfigScreen> {
   String _displayName(ServerProfile profile) {
     final endpoint =
         '${profile.config.serverHost}:${profile.config.serverPort}';
-    return profile.name.trim() == endpoint ? 'Default node' : profile.name;
+    if (profile.name == 'New node' || profile.name == 'Saved server') {
+      return context.tr(profile.name);
+    }
+    return profile.name.trim() == endpoint
+        ? context.tr('Default node')
+        : profile.name;
   }
 
   String _endpointLabel(ServerProfile profile) =>
       profile.config.serverHost.trim().isEmpty || profile.config.serverPort <= 0
-      ? 'Not configured'
+      ? context.tr('Not configured')
       : '${profile.config.serverHost}:${profile.config.serverPort}';
 
   Future<void> _runProfileAction(
@@ -329,12 +418,20 @@ class _ConfigScreenState extends State<ConfigScreen> {
   Future<void> _save(ServerProfile profile) => widget.controller.saveProfile(
     profile.copyWith(
       config: SsConfig(
+        protocol: protocol,
         serverHost: host.text.trim(),
         serverPort: int.tryParse(port.text) ?? 0,
         password: password.text,
         method: method,
         httpProxyPort: int.tryParse(proxyPort.text) ?? 0,
         udpTargets: targets.text.trim(),
+        uuid: uuid.text.trim(),
+        flow: flow.text.trim(),
+        serverName: serverName.text.trim(),
+        realityPublicKey: publicKey.text.trim(),
+        realityShortId: shortId.text.trim(),
+        fingerprint: fingerprint.text.trim(),
+        spiderX: spiderX.text.trim(),
       ),
     ),
   );
@@ -395,16 +492,16 @@ class _RenameProfileDialogState extends State<_RenameProfileDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Rename node'),
+    title: Text(context.tr('Rename node')),
     content: TextField(controller: controller, autofocus: true),
     actions: <Widget>[
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text(context.tr('Cancel')),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(context, controller.text.trim()),
-        child: const Text('Rename'),
+        child: Text(context.tr('Rename')),
       ),
     ],
   );
@@ -440,7 +537,9 @@ class _StunEditorDialogState extends State<_StunEditorDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(
-      widget.existing == null ? 'Add STUN server' : 'Edit STUN server',
+      context.tr(
+        widget.existing == null ? 'Add STUN server' : 'Edit STUN server',
+      ),
     ),
     content: Column(
       mainAxisSize: MainAxisSize.min,
@@ -448,20 +547,20 @@ class _StunEditorDialogState extends State<_StunEditorDialog> {
         TextField(
           controller: host,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Host'),
+          decoration: InputDecoration(labelText: context.tr('Host')),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: port,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Port'),
+          decoration: InputDecoration(labelText: context.tr('Port')),
         ),
       ],
     ),
     actions: <Widget>[
       TextButton(
         onPressed: () => Navigator.pop(context),
-        child: const Text('Cancel'),
+        child: Text(context.tr('Cancel')),
       ),
       FilledButton(
         onPressed: () => Navigator.pop(
@@ -475,7 +574,7 @@ class _StunEditorDialogState extends State<_StunEditorDialog> {
             enabled: widget.existing?.enabled ?? true,
           ),
         ),
-        child: const Text('Save'),
+        child: Text(context.tr('Save')),
       ),
     ],
   );

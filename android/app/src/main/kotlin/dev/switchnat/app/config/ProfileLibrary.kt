@@ -36,15 +36,23 @@ data class ProfileLibrary(
     )
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 1
+        const val CURRENT_SCHEMA_VERSION = 2
     }
 }
 
 fun ShadowsocksConfig.toMap(): Map<String, Any> = mapOf(
+    "protocol" to protocol,
     "serverHost" to serverHost,
     "serverPort" to serverPort,
     "password" to password,
     "method" to method,
     "httpProxyPort" to httpProxyPort,
-    "udpTargets" to udpTargets
+    "udpTargets" to udpTargets,
+    "uuid" to uuid,
+    "flow" to flow,
+    "serverName" to serverName,
+    "realityPublicKey" to realityPublicKey,
+    "realityShortId" to realityShortId,
+    "fingerprint" to fingerprint,
+    "spiderX" to spiderX
 )

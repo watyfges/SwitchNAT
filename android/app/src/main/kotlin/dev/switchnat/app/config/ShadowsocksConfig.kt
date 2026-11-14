@@ -3,22 +3,44 @@ package dev.switchnat.app.config
 import dev.switchnat.app.ss.TargetAddress
 
 data class ShadowsocksConfig(
+    val protocol: String = PROTOCOL_SHADOWSOCKS,
     val serverHost: String,
     val serverPort: Int,
     val password: String,
     val method: String,
     val httpProxyPort: Int,
-    val udpTargets: String = ""
+    val udpTargets: String = "",
+    val uuid: String = "",
+    val flow: String = "xtls-rprx-vision",
+    val serverName: String = "",
+    val realityPublicKey: String = "",
+    val realityShortId: String = "",
+    val fingerprint: String = "chrome",
+    val spiderX: String = "/"
 ) {
+    val isVlessReality: Boolean get() = protocol == PROTOCOL_VLESS_REALITY
     val parsedUdpTargets: List<TargetAddress>
         get() = parseUdpTargets(udpTargets)
 
     fun validate(): List<String> {
         val errors = mutableListOf<String>()
+        if (protocol !in SUPPORTED_PROTOCOLS) errors += "Unsupported protocol: $protocol"
         if (serverHost.isBlank()) errors += "Server host is required"
         if (serverPort !in 1..65535) errors += "Server port must be between 1 and 65535"
-        if (password.isEmpty()) errors += "Password is required"
-        if (method !in SUPPORTED_METHODS) errors += "Unsupported method: $method"
+        if (protocol == PROTOCOL_SHADOWSOCKS) {
+            if (password.isEmpty()) errors += "Password is required"
+            if (method !in SUPPORTED_METHODS) errors += "Unsupported method: $method"
+        } else if (protocol == PROTOCOL_VLESS_REALITY) {
+            if (!UUID_PATTERN.matches(uuid)) errors += "A valid VLESS UUID is required"
+            if (serverName.isBlank()) errors += "Reality server name is required"
+            if (realityPublicKey.isBlank()) errors += "Reality public key is required"
+            if (realityShortId.isNotEmpty() &&
+                (!HEX_PATTERN.matches(realityShortId) || realityShortId.length % 2 != 0 || realityShortId.length > 16)
+            ) {
+                errors += "Reality short ID must be even-length hex up to 16 chars"
+            }
+            if (fingerprint.isBlank()) errors += "Reality fingerprint is required"
+        }
         if (httpProxyPort !in 1024..65535) {
             errors += "HTTP proxy port must be between 1024 and 65535"
         }
@@ -28,7 +50,12 @@ data class ShadowsocksConfig(
     }
 
     companion object {
+        const val PROTOCOL_SHADOWSOCKS = "shadowsocks"
+        const val PROTOCOL_VLESS_REALITY = "vless-reality"
+        val SUPPORTED_PROTOCOLS = setOf(PROTOCOL_SHADOWSOCKS, PROTOCOL_VLESS_REALITY)
         val SUPPORTED_METHODS = setOf("aes-128-gcm", "aes-256-gcm", "chacha20-ietf-poly1305")
+        private val UUID_PATTERN = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        private val HEX_PATTERN = Regex("^[0-9a-fA-F]+$")
 
         fun parseUdpTargets(raw: String): List<TargetAddress> {
             if (raw.isBlank()) return emptyList()
@@ -104,12 +131,20 @@ data class ShadowsocksConfig(
 
         fun fromMap(map: Map<String, Any?>): ShadowsocksConfig {
             return ShadowsocksConfig(
+                protocol = map["protocol"] as? String ?: PROTOCOL_SHADOWSOCKS,
                 serverHost = map["serverHost"] as? String ?: "",
                 serverPort = map["serverPort"] as? Int ?: 0,
                 password = map["password"] as? String ?: "",
                 method = map["method"] as? String ?: "aes-128-gcm",
                 httpProxyPort = map["httpProxyPort"] as? Int ?: 7890,
-                udpTargets = map["udpTargets"] as? String ?: ""
+                udpTargets = map["udpTargets"] as? String ?: "",
+                uuid = map["uuid"] as? String ?: "",
+                flow = map["flow"] as? String ?: "xtls-rprx-vision",
+                serverName = map["serverName"] as? String ?: "",
+                realityPublicKey = map["realityPublicKey"] as? String ?: "",
+                realityShortId = map["realityShortId"] as? String ?: "",
+                fingerprint = map["fingerprint"] as? String ?: "chrome",
+                spiderX = map["spiderX"] as? String ?: "/"
             )
         }
     }

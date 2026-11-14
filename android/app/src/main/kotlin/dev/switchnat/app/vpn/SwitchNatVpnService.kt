@@ -22,10 +22,15 @@ import dev.switchnat.app.proxy.HttpConnectProxy
 import dev.switchnat.app.ss.ShadowsocksTcpClient
 import dev.switchnat.app.ss.ShadowsocksUdpClient
 import dev.switchnat.app.ss.SocketProtector
+import dev.switchnat.app.ss.TcpOutboundFactory
 import dev.switchnat.app.ss.TcpSocketProtector
+import dev.switchnat.app.ss.UdpRelaySession
 import dev.switchnat.app.config.profileRepository
 import dev.switchnat.app.udp.LocalUdpEndpointProxy
 import dev.switchnat.app.udp.UdpRelaySessionFactory
+import dev.switchnat.app.xray.Socks5TcpClient
+import dev.switchnat.app.xray.Socks5UdpClient
+import dev.switchnat.app.xray.XrayCoreRuntime
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.Socket
@@ -42,6 +47,7 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
     private var tun: ParcelFileDescriptor? = null
     private var httpProxy: HttpConnectProxy? = null
     private var udpEndpointProxy: LocalUdpEndpointProxy? = null
+    private var xrayRuntime: XrayCoreRuntime? = null
     private var startupThread: Thread? = null
     private var diagnosticsCoordinator: ConnectionDiagnosticsCoordinator? = null
     private var notificationThread: Thread? = null
@@ -131,10 +137,22 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
                 ?: error("TUN establish returned null")
             tun = descriptor
 
+            val tcpOutboundFactory: TcpOutboundFactory
+            val udpSessionFactory: () -> UdpRelaySession
+            if (runtimeConfig.isVlessReality) {
+                val xray = XrayCoreRuntime.start(this, runtimeConfig, diagnostics)
+                xrayRuntime = xray
+                tcpOutboundFactory = Socks5TcpClient(LOOPBACK_ADDRESS, xray.socksPort)
+                udpSessionFactory = { Socks5UdpClient(LOOPBACK_ADDRESS, xray.socksPort) }
+            } else {
+                tcpOutboundFactory = ShadowsocksTcpClient(runtimeConfig, protector = this)
+                udpSessionFactory = { ShadowsocksUdpClient(runtimeConfig, protector = this) }
+            }
+
             val proxy = HttpConnectProxy(
                 bindHost = "0.0.0.0",
                 port = config.httpProxyPort,
-                outboundFactory = ShadowsocksTcpClient(runtimeConfig, protector = this),
+                outboundFactory = tcpOutboundFactory,
                 diagnostics = diagnostics
             )
             proxy.start()
@@ -146,9 +164,7 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
                     ?.let(InetAddress::getByName)
                 udpEndpointProxy = LocalUdpEndpointProxy(
                     targets = udpTargets,
-                    relaySessionFactory = UdpRelaySessionFactory {
-                        ShadowsocksUdpClient(runtimeConfig, protector = this)
-                    },
+                    relaySessionFactory = UdpRelaySessionFactory { udpSessionFactory() },
                     diagnostics = diagnostics,
                     localAliasAddress = localAliasAddress
                 ).also { it.start() }
@@ -162,15 +178,11 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
             diagnosticsCoordinator = ConnectionDiagnosticsCoordinator(
                 diagnostics = diagnostics,
                 tcpProbe = {
-                    SsTcpConnectivityTester(
-                        ShadowsocksTcpClient(runtimeConfig, protector = this)
-                    ).test()
+                    SsTcpConnectivityTester(tcpOutboundFactory).test()
                 },
                 natProbe = {
                     StunNatTester(
-                        sessionFactory = {
-                            ShadowsocksUdpClient(runtimeConfig, protector = this)
-                        }
+                        sessionFactory = udpSessionFactory
                     ).test(stunServers)
                 }
             ).also { it.runStartupTests() }
@@ -196,12 +208,21 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
 
     private fun configFromIntent(intent: Intent): ShadowsocksConfig {
         return ShadowsocksConfig(
+            protocol = intent.getStringExtra(VpnController.EXTRA_PROTOCOL)
+                ?: ShadowsocksConfig.PROTOCOL_SHADOWSOCKS,
             serverHost = intent.getStringExtra(VpnController.EXTRA_SERVER_HOST).orEmpty(),
             serverPort = intent.getIntExtra(VpnController.EXTRA_SERVER_PORT, 0),
             password = intent.getStringExtra(VpnController.EXTRA_PASSWORD).orEmpty(),
             method = intent.getStringExtra(VpnController.EXTRA_METHOD) ?: "aes-128-gcm",
             httpProxyPort = intent.getIntExtra(VpnController.EXTRA_HTTP_PROXY_PORT, 7890),
-            udpTargets = intent.getStringExtra(VpnController.EXTRA_UDP_TARGETS).orEmpty()
+            udpTargets = intent.getStringExtra(VpnController.EXTRA_UDP_TARGETS).orEmpty(),
+            uuid = intent.getStringExtra(VpnController.EXTRA_UUID).orEmpty(),
+            flow = intent.getStringExtra(VpnController.EXTRA_FLOW) ?: "xtls-rprx-vision",
+            serverName = intent.getStringExtra(VpnController.EXTRA_SERVER_NAME).orEmpty(),
+            realityPublicKey = intent.getStringExtra(VpnController.EXTRA_REALITY_PUBLIC_KEY).orEmpty(),
+            realityShortId = intent.getStringExtra(VpnController.EXTRA_REALITY_SHORT_ID).orEmpty(),
+            fingerprint = intent.getStringExtra(VpnController.EXTRA_FINGERPRINT) ?: "chrome",
+            spiderX = intent.getStringExtra(VpnController.EXTRA_SPIDER_X) ?: "/"
         )
     }
 
@@ -247,9 +268,11 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
         runCatching { diagnosticsCoordinator?.close() }
         runCatching { httpProxy?.stop() }
         runCatching { udpEndpointProxy?.close() }
+        runCatching { xrayRuntime?.close() }
         runCatching { tun?.close() }
         httpProxy = null
         udpEndpointProxy = null
+        xrayRuntime = null
         tun = null
         startupThread?.takeIf { it !== Thread.currentThread() }?.interrupt()
         startupThread = null
@@ -317,6 +340,7 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
         const val TUN_ADDRESS = "10.88.0.2"
         const val TUN_PREFIX_LENGTH = 32
         const val TUN_MTU = 1500
+        const val LOOPBACK_ADDRESS = "127.0.0.1"
         const val NOTIFICATION_UPDATE_MILLIS = 1_000L
     }
 }

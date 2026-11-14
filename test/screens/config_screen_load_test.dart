@@ -36,4 +36,61 @@ void main() {
     expect(find.text('aes-256-gcm'), findsOneWidget);
     controller.dispose();
   });
+
+  testWidgets('shows saved VLESS Reality fields after library load', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const config = SsConfig(
+      protocol: SsConfig.protocolVlessReality,
+      serverHost: 'vless.example.com',
+      serverPort: 443,
+      password: '',
+      method: 'aes-128-gcm',
+      httpProxyPort: 7890,
+      uuid: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+      serverName: 'www.example.com',
+      realityPublicKey: 'public-key',
+      realityShortId: '0123abcd',
+    );
+    final library = ProfileLibrary(
+      schemaVersion: 2,
+      profiles: const [
+        ServerProfile(id: 'v1', name: 'Reality', config: config),
+      ],
+      selectedProfileId: 'v1',
+      stunServers: const [],
+    );
+    final controller = AppController(
+      bridge: TestBridge(),
+      store: MemoryConfigStore(library),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ConfigScreen(controller: controller)),
+      ),
+    );
+
+    expect(find.text('VLESS + Reality'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'UUID'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Server name (SNI)'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextField, 'Reality public key'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(TextField, 'Password'), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'UUID'))
+          .controller
+          ?.text,
+      'd342d11e-d424-4583-b36e-524ab1f0afa4',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

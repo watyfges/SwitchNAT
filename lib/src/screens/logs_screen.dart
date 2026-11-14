@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/service_status.dart';
 
 class LogsScreen extends StatelessWidget {
@@ -25,12 +26,12 @@ class LogsScreen extends StatelessWidget {
                 children: <Widget>[
                   Expanded(
                     child: Text(
-                      'Packet log',
+                      context.tr('Packet log'),
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Copy logs',
+                    tooltip: context.tr('Copy logs'),
                     onPressed: status == null
                         ? null
                         : () => _copyLogs(context, status),
@@ -42,7 +43,7 @@ class LogsScreen extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               child: samples.isEmpty
-                  ? const Center(child: Text('No packets captured yet'))
+                  ? Center(child: Text(context.tr('No packets captured yet')))
                   : ListView.separated(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: samples.length,
@@ -69,7 +70,7 @@ class LogsScreen extends StatelessWidget {
     if (context.mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Logs copied')));
+      ).showSnackBar(SnackBar(content: Text(context.tr('Logs copied'))));
     }
   }
 }

@@ -176,7 +176,7 @@ class ProfileRepository(
 
     private fun decode(raw: String): ProfileLibrary {
         val root = JSONObject(raw)
-        require(root.optInt("schemaVersion", 0) == ProfileLibrary.CURRENT_SCHEMA_VERSION) {
+        require(root.optInt("schemaVersion", 0) in 1..ProfileLibrary.CURRENT_SCHEMA_VERSION) {
             "Unsupported profile schema"
         }
         val usedProfileIds = mutableSetOf<String>()
@@ -215,6 +215,7 @@ class ProfileRepository(
             )
         }
         return ProfileLibrary(
+            schemaVersion = ProfileLibrary.CURRENT_SCHEMA_VERSION,
             profiles = profiles,
             selectedProfileId = selected,
             stunServers = stunServers

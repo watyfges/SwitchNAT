@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config/config_store.dart';
+import 'l10n/app_strings.dart';
 import 'native/native_bridge.dart';
 import 'screens/config_screen.dart';
 import 'screens/home_screen.dart';
@@ -62,6 +64,8 @@ class _SwitchNatAppState extends State<SwitchNatApp> {
     return MaterialApp(
       title: 'SwitchNAT',
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const <Locale>[Locale('en'), Locale('zh')],
       theme: ThemeData(
         colorScheme: colorScheme,
         scaffoldBackgroundColor: Colors.white,
@@ -122,43 +126,45 @@ class _SwitchNatAppState extends State<SwitchNatApp> {
           ),
         ),
       ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(Icons.swap_horiz_rounded, color: primary),
-              SizedBox(width: 8),
-              Text('SwitchNAT'),
+      home: Builder(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(Icons.swap_horiz_rounded, color: primary),
+                SizedBox(width: 8),
+                Text('SwitchNAT'),
+              ],
+            ),
+          ),
+          body: IndexedStack(index: index, children: screens),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: index,
+            onDestinationSelected: (value) => setState(() => index = value),
+            destinations: <NavigationDestination>[
+              NavigationDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home),
+                label: context.tr('Home'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.settings_outlined),
+                selectedIcon: const Icon(Icons.settings),
+                label: context.tr('Config'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.monitor_heart_outlined),
+                selectedIcon: const Icon(Icons.monitor_heart),
+                label: context.tr('Status'),
+              ),
+              NavigationDestination(
+                icon: const Icon(Icons.article_outlined),
+                selectedIcon: const Icon(Icons.article),
+                label: context.tr('Logs'),
+              ),
             ],
           ),
-        ),
-        body: IndexedStack(index: index, children: screens),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: (value) => setState(() => index = value),
-          destinations: const <NavigationDestination>[
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings),
-              label: 'Config',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.monitor_heart_outlined),
-              selectedIcon: Icon(Icons.monitor_heart),
-              label: 'Status',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.article_outlined),
-              selectedIcon: Icon(Icons.article),
-              label: 'Logs',
-            ),
-          ],
         ),
       ),
     );

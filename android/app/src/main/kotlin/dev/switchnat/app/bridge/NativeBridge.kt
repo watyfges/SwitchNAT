@@ -159,12 +159,20 @@ class NativeBridge(
         }
         result.success(
             mapOf(
+                "protocol" to preferences.getString(KEY_PROTOCOL, ShadowsocksConfig.PROTOCOL_SHADOWSOCKS),
                 "serverHost" to preferences.getString(KEY_SERVER_HOST, ""),
                 "serverPort" to preferences.getInt(KEY_SERVER_PORT, 0),
                 "password" to preferences.getString(KEY_PASSWORD, ""),
                 "method" to preferences.getString(KEY_METHOD, "aes-128-gcm"),
                 "httpProxyPort" to preferences.getInt(KEY_HTTP_PROXY_PORT, 7890),
-                "udpTargets" to preferences.getString(KEY_UDP_TARGETS, "")
+                "udpTargets" to preferences.getString(KEY_UDP_TARGETS, ""),
+                "uuid" to preferences.getString(KEY_UUID, ""),
+                "flow" to preferences.getString(KEY_FLOW, "xtls-rprx-vision"),
+                "serverName" to preferences.getString(KEY_SERVER_NAME, ""),
+                "realityPublicKey" to preferences.getString(KEY_REALITY_PUBLIC_KEY, ""),
+                "realityShortId" to preferences.getString(KEY_REALITY_SHORT_ID, ""),
+                "fingerprint" to preferences.getString(KEY_FINGERPRINT, "chrome"),
+                "spiderX" to preferences.getString(KEY_SPIDER_X, "/")
             )
         )
     }
@@ -173,12 +181,20 @@ class NativeBridge(
         val config = configFromCall(call, result) ?: return
         activity.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
             .edit()
+            .putString(KEY_PROTOCOL, config.protocol)
             .putString(KEY_SERVER_HOST, config.serverHost)
             .putInt(KEY_SERVER_PORT, config.serverPort)
             .putString(KEY_PASSWORD, config.password)
             .putString(KEY_METHOD, config.method)
             .putInt(KEY_HTTP_PROXY_PORT, config.httpProxyPort)
             .putString(KEY_UDP_TARGETS, config.udpTargets)
+            .putString(KEY_UUID, config.uuid)
+            .putString(KEY_FLOW, config.flow)
+            .putString(KEY_SERVER_NAME, config.serverName)
+            .putString(KEY_REALITY_PUBLIC_KEY, config.realityPublicKey)
+            .putString(KEY_REALITY_SHORT_ID, config.realityShortId)
+            .putString(KEY_FINGERPRINT, config.fingerprint)
+            .putString(KEY_SPIDER_X, config.spiderX)
             .apply()
         result.success(true)
     }
@@ -277,10 +293,18 @@ class NativeBridge(
         const val STATUS_INTERVAL_MILLIS = 1_000L
         const val PREFERENCES_NAME = "switchnat_config"
         const val KEY_SERVER_HOST = "serverHost"
+        const val KEY_PROTOCOL = "protocol"
         const val KEY_SERVER_PORT = "serverPort"
         const val KEY_PASSWORD = "password"
         const val KEY_METHOD = "method"
         const val KEY_HTTP_PROXY_PORT = "httpProxyPort"
         const val KEY_UDP_TARGETS = "udpTargets"
+        const val KEY_UUID = "uuid"
+        const val KEY_FLOW = "flow"
+        const val KEY_SERVER_NAME = "serverName"
+        const val KEY_REALITY_PUBLIC_KEY = "realityPublicKey"
+        const val KEY_REALITY_SHORT_ID = "realityShortId"
+        const val KEY_FINGERPRINT = "fingerprint"
+        const val KEY_SPIDER_X = "spiderX"
     }
 }

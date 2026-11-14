@@ -78,4 +78,49 @@ void main() {
       'UDP target must be IPv4:port: example.com:8123',
     ]);
   });
+
+  test(
+    'VLESS Reality config round-trips and does not require an SS password',
+    () {
+      const config = SsConfig(
+        protocol: SsConfig.protocolVlessReality,
+        serverHost: 'vless.example.com',
+        serverPort: 443,
+        password: '',
+        method: 'aes-128-gcm',
+        httpProxyPort: 7890,
+        uuid: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+        serverName: 'www.example.com',
+        realityPublicKey: 'public-key',
+        realityShortId: '0123abcd',
+        fingerprint: 'chrome',
+        flow: 'xtls-rprx-vision',
+        spiderX: '/',
+      );
+
+      expect(config.validate(), isEmpty);
+      expect(SsConfig.fromJson(config.toJson()), config);
+    },
+  );
+
+  test('VLESS Reality validates UUID and Reality fields', () {
+    const config = SsConfig(
+      protocol: SsConfig.protocolVlessReality,
+      serverHost: 'vless.example.com',
+      serverPort: 443,
+      password: '',
+      method: 'aes-128-gcm',
+      httpProxyPort: 7890,
+      uuid: 'not-a-uuid',
+      serverName: '',
+      realityPublicKey: '',
+      realityShortId: 'xyz',
+      fingerprint: '',
+    );
+
+    expect(config.validate(), contains('A valid VLESS UUID is required'));
+    expect(config.validate(), contains('Reality server name is required'));
+    expect(config.validate(), contains('Reality public key is required'));
+    expect(config.validate(), contains('Reality fingerprint is required'));
+  });
 }

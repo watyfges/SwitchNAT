@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config/profile_library.dart';
+import '../l10n/app_strings.dart';
 import '../state/app_controller.dart';
 import '../state/service_status.dart';
 
@@ -18,13 +19,13 @@ class HomeScreen extends StatelessWidget {
       final rawEndpoint = profile == null
           ? ''
           : '${profile.config.serverHost}:${profile.config.serverPort}';
-      final endpoint = profile == null ? '' : _endpointLabel(profile);
+      final endpoint = profile == null ? '' : _endpointLabel(context, profile);
       final endpointShapedName = profile?.name.trim() == rawEndpoint;
       return ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: <Widget>[
           Text(
-            'Acceleration',
+            context.tr('Acceleration'),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 16),
@@ -38,10 +39,12 @@ class HomeScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        const Text('MASTER SWITCH'),
+                        Text(context.tr('MASTER SWITCH')),
                         const SizedBox(height: 6),
                         Text(
-                          on ? 'Acceleration is on' : 'Acceleration is off',
+                          context.tr(
+                            on ? 'Acceleration is on' : 'Acceleration is off',
+                          ),
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         Text(
@@ -49,7 +52,7 @@ class HomeScreen extends StatelessWidget {
                               ? (status.activeProfileName.isEmpty
                                     ? profile?.name ?? ''
                                     : status.activeProfileName)
-                              : 'Ready to connect',
+                              : context.tr('Ready to connect'),
                         ),
                       ],
                     ),
@@ -72,10 +75,10 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             child: ListTile(
-              title: const Text('Selected node'),
+              title: Text(context.tr('Selected node')),
               subtitle: Text(
                 profile == null
-                    ? 'Loading…'
+                    ? context.tr('Loading…')
                     : endpointShapedName
                     ? endpoint
                     : '${profile.name}\n$endpoint',
@@ -83,7 +86,7 @@ class HomeScreen extends StatelessWidget {
               isThreeLine: profile != null && !endpointShapedName,
               trailing: TextButton(
                 onPressed: profile == null ? null : () => _pickProfile(context),
-                child: const Text('Select'),
+                child: Text(context.tr('Select')),
               ),
               onTap: on ? controller.runTcpTest : null,
             ),
@@ -91,16 +94,16 @@ class HomeScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _MetricCard(
             key: const Key('switch-card'),
-            label: 'SWITCH',
-            value: _switchLabel(status.switchPresence),
+            label: context.tr('SWITCH'),
+            value: _switchLabel(context, status.switchPresence),
             detail: status.learnedSwitchIp,
             icon: Icons.sports_esports_outlined,
           ),
           const SizedBox(height: 8),
           _MetricCard(
             key: const Key('nat-card'),
-            label: 'SS UDP NAT',
-            value: _natLabel(status),
+            label: context.tr('UDP NAT'),
+            value: _natLabel(context, status),
             detail: status.natTest.mappedAddress,
             icon: Icons.public,
             onTap: on && status.natTest.state != DiagnosticRunState.testing
@@ -109,11 +112,13 @@ class HomeScreen extends StatelessWidget {
           ),
           if (controller.hasPendingProfileChange) ...<Widget>[
             const SizedBox(height: 12),
-            const Card(
-              color: Color(0xfffff2d8),
+            Card(
+              color: const Color(0xfffff2d8),
               child: Padding(
-                padding: EdgeInsets.all(14),
-                child: Text('Restart the service to use the selected node.'),
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  context.tr('Restart the service to use the selected node.'),
+                ),
               ),
             ),
           ],
@@ -139,7 +144,7 @@ class HomeScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Text(
-                'Select node',
+                context.tr('Select node'),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
@@ -159,8 +164,8 @@ class HomeScreen extends StatelessWidget {
                               ? Icons.check_circle
                               : Icons.circle_outlined,
                         ),
-                        title: Text(_displayName(profile)),
-                        subtitle: Text(_endpointLabel(profile)),
+                        title: Text(_displayName(context, profile)),
+                        subtitle: Text(_endpointLabel(context, profile)),
                         onTap: () => Navigator.pop(context, profile.id),
                       ),
                     )
@@ -174,30 +179,37 @@ class HomeScreen extends StatelessWidget {
     if (id != null) await controller.selectProfile(id);
   }
 
-  String _displayName(ServerProfile profile) {
+  String _displayName(BuildContext context, ServerProfile profile) {
     final endpoint =
         '${profile.config.serverHost}:${profile.config.serverPort}';
-    return profile.name.trim() == endpoint ? 'Default node' : profile.name;
+    if (profile.name == 'New node' || profile.name == 'Saved server') {
+      return context.tr(profile.name);
+    }
+    return profile.name.trim() == endpoint
+        ? context.tr('Default node')
+        : profile.name;
   }
 
-  String _endpointLabel(ServerProfile profile) =>
+  String _endpointLabel(BuildContext context, ServerProfile profile) =>
       profile.config.serverHost.trim().isEmpty || profile.config.serverPort <= 0
-      ? 'Not configured'
+      ? context.tr('Not configured')
       : '${profile.config.serverHost}:${profile.config.serverPort}';
 
-  String _switchLabel(SwitchPresence value) => switch (value) {
-    SwitchPresence.waiting => 'Waiting for Switch',
-    SwitchPresence.connected => 'Connected',
-    SwitchPresence.inactive => 'Inactive',
-  };
+  String _switchLabel(BuildContext context, SwitchPresence value) =>
+      switch (value) {
+        SwitchPresence.waiting => context.tr('Waiting for Switch'),
+        SwitchPresence.connected => context.tr('Connected'),
+        SwitchPresence.inactive => context.tr('Inactive'),
+      };
 
-  String _natLabel(ServiceStatus status) => switch (status.natTest.state) {
-    DiagnosticRunState.testing => 'Testing…',
-    DiagnosticRunState.available => status.natTest.legacyLabel,
-    DiagnosticRunState.partial => 'Partial result',
-    DiagnosticRunState.unavailable => 'Unavailable',
-    DiagnosticRunState.idle => 'Not tested',
-  };
+  String _natLabel(BuildContext context, ServiceStatus status) =>
+      switch (status.natTest.state) {
+        DiagnosticRunState.testing => context.tr('Testing…'),
+        DiagnosticRunState.available => status.natTest.legacyLabel,
+        DiagnosticRunState.partial => context.tr('Partial result'),
+        DiagnosticRunState.unavailable => context.tr('Unavailable'),
+        DiagnosticRunState.idle => context.tr('Not tested'),
+      };
 }
 
 class _MetricCard extends StatelessWidget {

@@ -14,9 +14,9 @@ object ServerAddressResolver {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
-        require(candidates.isNotEmpty()) { "Resolved Shadowsocks server address is empty" }
+        require(candidates.isNotEmpty()) { "Resolved node server address is empty" }
         val resolvedHost = candidates.firstOrNull { canConnect(it, config.serverPort) }
-            ?: error("No reachable Shadowsocks server address for ${config.serverHost}:${config.serverPort}")
+            ?: error("No reachable node server address for ${config.serverHost}:${config.serverPort}")
         return config.copy(serverHost = resolvedHost)
     }
 

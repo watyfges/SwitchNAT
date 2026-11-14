@@ -32,6 +32,7 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
+    implementation(files("libs/libv2ray.aar"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

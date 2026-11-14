@@ -6,12 +6,12 @@
 
 ## 1. 目标与非目标
 
-SwitchNAT 的目标是在无 Root、无特权系统 API 的 Android 应用中，为连接手机热点的 Nintendo Switch 提供两条 Shadowsocks 出口路径：
+SwitchNAT 的目标是在无 Root、无特权系统 API 的 Android 应用中，为连接手机热点的 Nintendo Switch 提供两条节点出口路径；节点可以是 Shadowsocks 或 VLESS + Reality：
 
 - 通过手动 HTTP 代理处理 TCP。
 - 通过 Android VpnService、本地 UDP endpoint 和动态 alias 处理选定 UDP 流量。
 
-设计重点是保持同一 Switch 源端口对应的 Shadowsocks UDP association，并在 P2P 玩家 endpoint 变化时延续已有 association。
+设计重点是保持同一 Switch 源端口对应的 UDP relay association，并在 P2P 玩家 endpoint 变化时延续已有 association。
 
 当前非目标包括：
 
@@ -33,9 +33,9 @@ flowchart LR
     HTTP["HttpConnectProxy"]
     VPN["VpnService + fixed UDP endpoints"]
     ALIAS["Dynamic UDP aliases"]
-    SSTCP["Shadowsocks TCP"]
-    SSUDP["Shadowsocks UDP session"]
-    SERVER["Shadowsocks server"]
+    SSTCP["SS TCP / VLESS Reality"]
+    SSUDP["SS UDP / VLESS UoT session"]
+    SERVER["Proxy server"]
     DEST["Nintendo services / P2P peers"]
 
     NS --> HOTSPOT
@@ -55,8 +55,8 @@ flowchart LR
 - Flutter：<code>AppController</code>、四个页面、配置模型和状态模型。
 - 平台桥：<code>NativeBridge</code> 和 <code>MethodChannelConfigStore</code>。
 - Android 服务：<code>SwitchNatVpnService</code>。
-- TCP：<code>HttpConnectProxy</code> 与 <code>ShadowsocksTcpClient</code>。
-- UDP：<code>LocalUdpEndpointProxy</code>、<code>UdpPeerAliasManager</code> 与 <code>ShadowsocksUdpClient</code>。
+- TCP：<code>HttpConnectProxy</code>、<code>ShadowsocksTcpClient</code> 或本地 Xray SOCKS5 出站。
+- UDP：<code>LocalUdpEndpointProxy</code>、<code>UdpPeerAliasManager</code>、<code>ShadowsocksUdpClient</code> 或 Xray SOCKS5 UDP association。
 - 诊断：<code>Diagnostics</code>、<code>ConnectionDiagnosticsCoordinator</code>、TCP probe 和 STUN probe。
 
 ## 3. 配置与控制流
@@ -66,13 +66,13 @@ Flutter 使用两个 channel：
 - <code>dev.switchnat.app/control</code>：请求 VPN/通知权限，加载或保存配置，启动、停止和运行诊断。
 - <code>dev.switchnat.app/status</code>：持续发布 <code>DiagnosticsSnapshot</code>。
 
-<code>ProfileRepository</code> 将 schema version 1 的 profile library 保存到 App 私有 SharedPreferences。library 包含：
+<code>ProfileRepository</code> 将 schema version 2 的 profile library 保存到 App 私有 SharedPreferences，并兼容读取 version 1。library 包含：
 
-- 一个或多个 Shadowsocks profile。
+- 一个或多个 Shadowsocks/VLESS Reality profile。
 - 当前选中的 profile ID。
 - 全局共享的 STUN server 列表。
 
-profile 包含 host、port、password、AEAD method、HTTP proxy port 和 UDP targets。首次启动会创建空节点，同时载入预置 UDP targets 和四个默认 STUN endpoint。旧版单节点配置会迁移到 profile library。
+profile 包含协议类型、host、port、HTTP proxy port、UDP targets 和协议专用字段。Shadowsocks 使用 password/AEAD method；VLESS Reality 使用 UUID、flow、SNI、Reality 公钥、short ID、fingerprint 和 spider path。首次启动会创建空节点，同时载入预置 UDP targets 和四个默认 STUN endpoint。旧版单节点配置会迁移到 profile library。
 
 运行时的 profile ID 会写入诊断 session。用户在服务运行期间选择另一节点时，UI 标记“待应用变更”，但不会替换正在使用的 socket；必须停止并重新启动服务。
 
@@ -82,7 +82,7 @@ profile 包含 host、port、password、AEAD method、HTTP proxy port 和 UDP ta
 
 1. Flutter 校验当前 profile，并请求通知和 VPN 权限。
 2. Android 启动 <code>SwitchNatVpnService</code> 前台服务，状态进入 <code>starting</code>。
-3. 服务解析 Shadowsocks host，检测热点网关并展开 UDP targets。
+3. 服务解析节点 host，检测热点网关并展开 UDP targets。
 4. VpnService Builder 添加 <code>10.88.0.2/32</code>、DNS <code>1.1.1.1</code>、MTU 1500。
 5. 每个固定 UDP target IP 同时通过 <code>addAddress(ip, 32)</code> 和 <code>addRoute(ip, 32)</code> 注册。
 6. 建立 TUN 后启动 HTTP proxy 和固定 UDP endpoint proxy。
@@ -153,6 +153,10 @@ Shadowsocks UDP socket 和 TCP socket 都调用 <code>VpnService.protect()</code
 - aes-256-gcm
 - chacha20-ietf-poly1305
 
+VLESS + Reality 节点由固定版本的 AndroidLibXrayLite/Xray Core 提供出站。<code>XrayCoreRuntime</code> 启动仅监听 <code>127.0.0.1</code> 的 SOCKS5 inbound；<code>Socks5TcpClient</code> 使用 CONNECT，<code>Socks5UdpClient</code> 使用 UDP ASSOCIATE。Reality 使用 RAW transport、SNI、fingerprint、short ID 和当前 Xray 字段 <code>password</code>（即界面中的 Reality 公钥）。UDP 使用 VLESS 原生 UoT；为避免 Vision 并发 XUDP 的兼容性风险，当前不强制开启 Mux/XUDP。
+
+Xray AAR 不提交到 Git。<code>scripts/fetch_xray_core.sh</code> 从官方 AndroidLibXrayLite release 下载固定版本并校验 SHA-256；本地构建和 GitHub Actions 都在 Gradle 编译前运行该脚本。
+
 ## 9. STUN 诊断
 
 服务进入 running 后，<code>ConnectionDiagnosticsCoordinator</code> 使用两个 worker 并行运行 TCP 和 NAT probe。首页点击相应卡片会取消同类旧任务并启动新 generation，旧结果不会覆盖新结果。
@@ -166,7 +170,7 @@ UI 兼容显示 Full Cone、Restricted Cone、Port-Restricted Cone 和 Symmetric
 
 只收到基础 Binding response、但缺少完成行为分类所需属性时，结果为 partial；所有服务器无响应时为 unavailable。
 
-该结果描述 **Shadowsocks 出口 UDP mapping/filtering behavior**，不是手机运营商 NAT，也不是 Switch 系统连接测试给出的 NAT grade。
+该结果描述 **当前节点出口的 UDP mapping/filtering behavior**，不是手机运营商 NAT，也不是 Switch 系统连接测试给出的 NAT grade。
 
 ## 10. Android Live Updates
 
@@ -266,4 +270,6 @@ cd android
 - Fixed UDP proxy：<code>android/app/src/main/kotlin/dev/switchnat/app/udp/LocalUdpEndpointProxy.kt</code>
 - Dynamic aliases：<code>android/app/src/main/kotlin/dev/switchnat/app/udp/UdpPeerAliasManager.kt</code>
 - Shadowsocks clients：<code>android/app/src/main/kotlin/dev/switchnat/app/ss/</code>
+- VLESS/Xray adapter：<code>android/app/src/main/kotlin/dev/switchnat/app/xray/</code>
+- CI release workflow：<code>.github/workflows/android.yml</code>
 - Diagnostics/STUN：<code>android/app/src/main/kotlin/dev/switchnat/app/diagnostics/</code>

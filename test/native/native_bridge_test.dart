@@ -39,12 +39,20 @@ void main() {
 
       expect(calls.single.method, 'start');
       expect(calls.single.arguments, <String, Object?>{
+        'protocol': 'shadowsocks',
         'serverHost': '203.0.113.10',
         'serverPort': 8388,
         'password': 'secret',
         'method': 'aes-128-gcm',
         'httpProxyPort': 7890,
         'udpTargets': '',
+        'uuid': '',
+        'flow': 'xtls-rprx-vision',
+        'serverName': '',
+        'realityPublicKey': '',
+        'realityShortId': '',
+        'fingerprint': 'chrome',
+        'spiderX': '/',
         'profileId': 'p1',
         'profileName': 'Tokyo',
       });
