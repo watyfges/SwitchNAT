@@ -287,7 +287,10 @@ class LocalUdpEndpointProxyTest {
     }
 
     private fun waitUntil(description: String = "condition", predicate: () -> Boolean) {
-        val deadline = System.nanoTime() + 3_000_000_000L
+        // Cold GitHub runners can spend several seconds scheduling the socket
+        // worker while Gradle is under load. Keep the assertion deterministic
+        // without changing production timing.
+        val deadline = System.nanoTime() + 10_000_000_000L
         while (System.nanoTime() < deadline) {
             if (predicate()) return
             Thread.sleep(10)
