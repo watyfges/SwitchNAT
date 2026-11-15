@@ -38,6 +38,7 @@ class XrayConfigBuilderTest {
         assertEquals(10808, inbound.getInt("port"))
         assertTrue(inbound.getJSONObject("settings").getBoolean("udp"))
         assertEquals("vless", outbound.getString("protocol"))
+        assertEquals("xudp", outbound.getJSONObject("settings").getString("packetEncoding"))
         assertEquals("203.0.113.8", server.getString("address"))
         assertEquals("d342d11e-d424-4583-b36e-524ab1f0afa4", user.getString("id"))
         assertEquals("reality", stream.getString("security"))

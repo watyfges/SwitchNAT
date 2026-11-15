@@ -26,15 +26,17 @@ object XrayConfigBuilder {
             .put("protocol", "vless")
             .put(
                 "settings",
-                JSONObject().put(
-                    "vnext",
-                    JSONArray().put(
-                        JSONObject()
-                            .put("address", config.serverHost)
-                            .put("port", config.serverPort)
-                            .put("users", JSONArray().put(user))
+                JSONObject()
+                    .put(
+                        "vnext",
+                        JSONArray().put(
+                            JSONObject()
+                                .put("address", config.serverHost)
+                                .put("port", config.serverPort)
+                                .put("users", JSONArray().put(user))
+                        )
                     )
-                )
+                    .put("packetEncoding", "xudp")
             )
             .put(
                 "streamSettings",

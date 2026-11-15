@@ -1,6 +1,7 @@
 package dev.switchnat.app.xray
 
 import android.content.Context
+import android.provider.Settings
 import dev.switchnat.app.config.ShadowsocksConfig
 import dev.switchnat.app.diagnostics.Diagnostics
 import go.Seq
@@ -53,7 +54,14 @@ class XrayCoreRuntime private constructor(
         private fun initialize(context: Context) {
             if (initialized.get()) return
             Seq.setContext(context.applicationContext)
-            Libv2ray.initCoreEnv(context.filesDir.absolutePath, "switchnat-xray-v1")
+            val deviceId = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            )
+            Libv2ray.initCoreEnv(
+                context.filesDir.absolutePath,
+                XudpBaseKey.fromDeviceId(deviceId)
+            )
             initialized.set(true)
         }
 

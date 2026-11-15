@@ -5,6 +5,16 @@ import org.junit.Test
 
 class DiagnosticsTest {
     @Test
+    fun beginningNewSessionClearsPreviousError() {
+        val diagnostics = Diagnostics()
+        diagnostics.setLastError("VPN_START", "previous failure")
+
+        diagnostics.beginSession("p1", "Tokyo", "203.0.113.10:8388")
+
+        assertEquals("", diagnostics.snapshot().lastError)
+    }
+
+    @Test
     fun switchPresenceUsesCurrentSessionAndActivityWindow() {
         var now = 10_000L
         val diagnostics = Diagnostics(clockMillis = { now })

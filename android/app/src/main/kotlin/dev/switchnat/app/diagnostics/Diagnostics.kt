@@ -180,6 +180,7 @@ class Diagnostics(private val clockMillis: () -> Long = System::currentTimeMilli
         learnedSwitchIp = ""
         tcpTest = TcpTestResult()
         natTest = NatTestResult()
+        lastError = ""
     }
 
     @Synchronized
