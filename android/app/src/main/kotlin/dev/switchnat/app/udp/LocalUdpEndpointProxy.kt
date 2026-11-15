@@ -134,12 +134,22 @@ class LocalUdpEndpointProxy(
                 val decoded = flow.session.receive()
                 sendBackToSwitch(flow, decoded)
             } catch (error: SocketException) {
-                if (running) diagnostics.setLastError("SS_UDP_SOCKET", error.message ?: error.javaClass.simpleName)
-                closeFlow(flow.sender, flow)
+                if (running && flows[flow.sender] === flow) {
+                    diagnostics.setLastError(
+                        "SS_UDP_SOCKET",
+                        error.message ?: error.javaClass.simpleName
+                    )
+                    closeFlow(flow.sender, flow)
+                }
                 break
             } catch (error: Throwable) {
-                if (running) diagnostics.setLastError("SS_UDP_RECEIVE", error.message ?: error.javaClass.simpleName)
-                closeFlow(flow.sender, flow)
+                if (running && flows[flow.sender] === flow) {
+                    diagnostics.setLastError(
+                        "SS_UDP_RECEIVE",
+                        error.message ?: error.javaClass.simpleName
+                    )
+                    closeFlow(flow.sender, flow)
+                }
                 break
             }
         }
