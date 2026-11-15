@@ -25,6 +25,7 @@ The project has been technically validated on specific devices and networks. Res
 - Dynamic P2P endpoint alias learning, reuse, timeout, and capacity eviction.
 - UDP relay-session reuse keyed by the Switch source IP:port, reducing public-port changes when destinations change.
 - Multiple node profiles with create, rename, select, save, and delete operations.
+- Multiple Clash YAML subscriptions with add, edit, per-source refresh, refresh-all, and delete operations; supported Shadowsocks and VLESS + Reality nodes are imported.
 - VLESS + Reality support (RAW with Vision or no flow) using an embedded Xray Core for both TCP and UDP.
 - English and Simplified Chinese UI that follows the Android system locale.
 - aes-128-gcm, aes-256-gcm, and chacha20-ietf-poly1305.
@@ -80,7 +81,7 @@ Build split release APKs:
 flutter build apk --release --split-per-abi
 ~~~
 
-The current release build still uses the debug signing configuration and is intended only for personal testing. Configure a dedicated release keystore before distribution, and never commit the keystore or its passwords.
+When signing environment variables are absent, a local release build falls back to debug signing and is suitable only for personal testing. Tagged releases are signed by GitHub Actions with the upgrade-compatible release keystore stored in repository Secrets. The keystore and passwords are never committed.
 
 Run Android JVM tests:
 
@@ -93,14 +94,15 @@ CI builds and uploads a workflow artifact for pushes and pull requests. Pushing 
 
 ## Usage
 
-1. On the Config page, create or select a profile, choose Shadowsocks or VLESS + Reality, and enter the protocol-specific fields and HTTP proxy port.
-2. Review the bundled UDP targets. They bootstrap fixed service traffic and can be adjusted from packet-capture evidence.
-3. Edit the global STUN server list if necessary, then save the profile.
-4. Enable the phone hotspot and connect the Switch.
-5. In the Switch network settings, set the HTTP proxy host to the hotspot gateway shown by the app and use the profile's proxy port.
-6. Start SwitchNAT from the Home page and grant VPN and notification permissions.
-7. Wait for the automatic TCP/STUN tests, or tap the corresponding status cards to run them again.
-8. Run the Switch connection test or enter a game, then use Status and Logs to inspect UDP flows, peer aliases, errors, and recent packet metadata.
+1. On Config, create a node manually or open Subscriptions to add a Clash YAML source. Subscriptions support individual and refresh-all updates; imported nodes are read-only.
+2. Select a Shadowsocks or VLESS + Reality node. Manual nodes require their protocol fields and HTTP proxy port.
+3. Review the bundled UDP targets. They bootstrap fixed service traffic and can be adjusted from packet-capture evidence.
+4. Edit the global STUN server list if necessary, then save the profile.
+5. Enable the phone hotspot and connect the Switch.
+6. In the Switch network settings, set the HTTP proxy host to the hotspot gateway shown by the app and use the profile's proxy port.
+7. Start SwitchNAT from the Home page and grant VPN and notification permissions.
+8. Wait for the automatic TCP/STUN tests, or tap the corresponding status cards to run them again.
+9. Run the Switch connection test or enter a game, then use Status and Logs to inspect UDP flows, peer aliases, errors, and recent packet metadata.
 
 Selecting another profile while the service is running does not silently replace the active session. Stop and restart the service to apply it.
 
@@ -114,13 +116,14 @@ Selecting another profile while the service is running does not silently replace
 - TCP requires a manually configured HTTP proxy on the Switch and is not transparent TCP interception.
 - Dynamic aliases require an existing UDP relay session and cannot discover traffic that has never reached the app.
 - Current VLESS support is RAW + Reality. UDP uses one SOCKS UDP association/VLESS UoT path per Switch flow and does not force XUDP Mux.
+- Subscription parsing currently targets Clash YAML and imports only supported Shadowsocks ciphers and TCP/RAW VLESS + Reality nodes; other protocols are skipped.
 - STUN servers must support the attributes needed by the behavior test; a basic Binding-only response can produce a partial result.
 - Android vendors may restrict hotspot-to-VPN routing, local address binding, foreground services, or Live Updates.
 - NAT A, matchmaking success, latency, and stability depend on the server, carrier, game protocol, and other external conditions.
 
 ## Security and Privacy
 
-- Node profiles are stored in app-private SharedPreferences, but the app does not currently add hardware-backed encryption.
+- Node profiles and subscription URLs are stored in app-private SharedPreferences without additional hardware-backed encryption. The subscription list shows only the hostname; the full URL is visible only while editing.
 - The app does not provide or upload public proxy nodes; users manage their own server and credentials.
 - Diagnostic packet samples contain only timestamp, protocol, source/destination, direction, and outcome metadata. They do not store payloads.
 - Remove passwords, server addresses, device identifiers, public IP addresses, and other personal data before publishing issues, logs, or captures.

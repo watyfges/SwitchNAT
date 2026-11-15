@@ -66,13 +66,16 @@ Flutter 使用两个 channel：
 - <code>dev.switchnat.app/control</code>：请求 VPN/通知权限，加载或保存配置，启动、停止和运行诊断。
 - <code>dev.switchnat.app/status</code>：持续发布 <code>DiagnosticsSnapshot</code>。
 
-<code>ProfileRepository</code> 将 schema version 2 的 profile library 保存到 App 私有 SharedPreferences，并兼容读取 version 1。library 包含：
+<code>ProfileRepository</code> 将 schema version 3 的 profile library 保存到 App 私有 SharedPreferences，并兼容读取 version 1 和 2。library 包含：
 
 - 一个或多个 Shadowsocks/VLESS Reality profile。
 - 当前选中的 profile ID。
 - 全局共享的 STUN server 列表。
+- 多个订阅源，以及订阅节点到来源和稳定节点 key 的关联。
 
 profile 包含协议类型、host、port、HTTP proxy port、UDP targets 和协议专用字段。Shadowsocks 使用 password/AEAD method；VLESS Reality 使用 UUID、flow、SNI、Reality 公钥、short ID、fingerprint 和 spider path。首次启动会创建空节点，同时载入预置 UDP targets 和四个默认 STUN endpoint。旧版单节点配置会迁移到 profile library。
+
+<code>SubscriptionService</code> 在 Flutter 层下载并解析 Clash YAML。它只接受 HTTP(S)，超时为 20 秒，响应上限为 2 MiB；当前支持指定 AEAD 的 Shadowsocks，以及 TCP/RAW VLESS + Reality。每个节点使用协议身份字段的 SHA-256 建立稳定 key。下载和完整解析成功后，Android 才原子替换该订阅的缓存节点；失败不会删除旧节点。刷新时匹配 key 的 profile ID 和当前选择保持不变，首次从空白 profile 导入时自动选择第一个订阅节点。
 
 运行时的 profile ID 会写入诊断 session。用户在服务运行期间选择另一节点时，UI 标记“待应用变更”，但不会替换正在使用的 socket；必须停止并重新启动服务。
 
@@ -217,7 +220,7 @@ flow map 使用 ConcurrentHashMap；alias map 在 lock 内访问；单个 flow �
 
 - 不需要 Root、ADB 常驻权限或特权系统 API。
 - App outbound socket 必须 protect，防止 VPN routing loop。
-- profile 保存在 MODE_PRIVATE SharedPreferences，但当前没有额外的 hardware-backed encryption。
+- profile 和订阅 URL 保存在 MODE_PRIVATE SharedPreferences，但当前没有额外的 hardware-backed encryption；订阅列表只渲染 URL host。
 - Android application 设置 <code>allowBackup=false</code>。
 - packet samples 不存 payload，但 endpoint 和 IP 元数据仍可能敏感。
 - 项目不内置用户 Shadowsocks server、密码、签名材料或遥测上传。

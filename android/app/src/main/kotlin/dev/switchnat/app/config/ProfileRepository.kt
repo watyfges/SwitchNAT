@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import dev.switchnat.app.R
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
 import java.util.UUID
 
 interface PreferenceStore {
@@ -27,7 +28,8 @@ class AndroidPreferenceStore(private val preferences: SharedPreferences) : Prefe
 class ProfileRepository(
     private val store: PreferenceStore,
     private val defaultTargets: () -> String,
-    private val nextId: () -> String = { UUID.randomUUID().toString() }
+    private val nextId: () -> String = { UUID.randomUUID().toString() },
+    private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
     fun load(): ProfileLibrary {
         val saved = store.getString(KEY_LIBRARY_JSON).takeIf(String::isNotBlank)
@@ -44,7 +46,9 @@ class ProfileRepository(
         val errors = profile.config.validate()
         require(errors.isEmpty()) { errors.joinToString("; ") }
         val current = load()
-        require(current.profiles.any { it.id == profile.id }) { "Profile not found: ${profile.id}" }
+        val existing = current.profiles.firstOrNull { it.id == profile.id }
+            ?: throw IllegalArgumentException("Profile not found: ${profile.id}")
+        require(!existing.isSubscriptionManaged) { "Subscription nodes are read-only" }
         return persist(current.copy(profiles = current.profiles.map {
             if (it.id == profile.id) profile.copy(name = profile.name.trim()) else it
         }))
@@ -66,7 +70,9 @@ class ProfileRepository(
     fun renameProfile(id: String, name: String): ProfileLibrary {
         require(name.isNotBlank()) { "Profile name is required" }
         val current = load()
-        require(current.profiles.any { it.id == id }) { "Profile not found: $id" }
+        val existing = current.profiles.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profile not found: $id")
+        require(!existing.isSubscriptionManaged) { "Subscription nodes are read-only" }
         return persist(current.copy(profiles = current.profiles.map {
             if (it.id == id) it.copy(name = name.trim()) else it
         }))
@@ -76,7 +82,9 @@ class ProfileRepository(
         val current = load()
         require(current.profiles.size > 1) { "The only profile cannot be deleted" }
         require(id != activeProfileId) { "The active profile cannot be deleted" }
-        require(current.profiles.any { it.id == id }) { "Profile not found: $id" }
+        val existing = current.profiles.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profile not found: $id")
+        require(!existing.isSubscriptionManaged) { "Delete the subscription instead" }
         val remaining = current.profiles.filterNot { it.id == id }
         val selected = if (current.selectedProfileId == id) remaining.first().id else current.selectedProfileId
         return persist(current.copy(profiles = remaining, selectedProfileId = selected))
@@ -90,6 +98,99 @@ class ProfileRepository(
             require(ids.add(server.id)) { "Duplicate STUN server id: ${server.id}" }
         }
         return persist(load().copy(stunServers = servers))
+    }
+
+    fun syncSubscription(
+        requestedId: String,
+        name: String,
+        url: String,
+        nodes: List<SubscriptionNode>
+    ): ProfileLibrary {
+        require(name.isNotBlank()) { "Subscription name is required" }
+        validateSubscriptionUrl(url)
+        require(nodes.isNotEmpty()) { "Subscription has no supported nodes" }
+        require(nodes.map { it.nodeKey }.toSet().size == nodes.size) {
+            "Subscription contains duplicate nodes"
+        }
+        nodes.forEach { node ->
+            require(node.nodeKey.isNotBlank()) { "Subscription node key is required" }
+            require(node.name.isNotBlank()) { "Subscription node name is required" }
+            val errors = node.config.validate()
+            require(errors.isEmpty()) { errors.joinToString("; ") }
+        }
+
+        val current = load()
+        val existingSource = requestedId.takeIf(String::isNotBlank)?.let { id ->
+            current.subscriptions.firstOrNull { it.id == id }
+                ?: throw IllegalArgumentException("Subscription not found: $id")
+        }
+        val usedIds = current.profiles.mapTo(mutableSetOf()) { it.id }
+        usedIds += current.subscriptions.map { it.id }
+        val sourceId = existingSource?.id ?: uniqueId(usedIds).also(usedIds::add)
+        val existingProfiles = current.profiles
+            .filter { it.subscriptionId == sourceId }
+            .associateBy { it.subscriptionNodeKey }
+        val imported = nodes.map { node ->
+            val profileId = existingProfiles[node.nodeKey]?.id
+                ?: uniqueId(usedIds).also(usedIds::add)
+            ServerProfile(
+                id = profileId,
+                name = node.name.trim(),
+                config = node.config,
+                subscriptionId = sourceId,
+                subscriptionNodeKey = node.nodeKey
+            )
+        }
+        val profiles = current.profiles.filterNot { it.subscriptionId == sourceId } + imported
+        val currentSelection = current.selectedProfile
+        val selectedId = current.selectedProfileId.takeIf { selected ->
+            currentSelection.config.serverHost.isNotBlank() &&
+                profiles.any { it.id == selected }
+        } ?: imported.first().id
+        val source = SubscriptionSource(
+            id = sourceId,
+            name = name.trim(),
+            url = url.trim(),
+            updatedAtMillis = nowMillis(),
+            nodeCount = imported.size
+        )
+        val subscriptions = if (existingSource == null) {
+            current.subscriptions + source
+        } else {
+            current.subscriptions.map { if (it.id == sourceId) source else it }
+        }
+        return persist(
+            current.copy(
+                profiles = profiles,
+                selectedProfileId = selectedId,
+                subscriptions = subscriptions
+            )
+        )
+    }
+
+    fun deleteSubscription(id: String, activeProfileId: String = ""): ProfileLibrary {
+        val current = load()
+        require(current.subscriptions.any { it.id == id }) { "Subscription not found: $id" }
+        val removedIds = current.profiles
+            .filter { it.subscriptionId == id }
+            .mapTo(mutableSetOf()) { it.id }
+        require(activeProfileId !in removedIds) {
+            "The active node belongs to this subscription"
+        }
+        var profiles = current.profiles.filterNot { it.subscriptionId == id }
+        if (profiles.isEmpty()) {
+            profiles = listOf(ServerProfile(uniqueId(removedIds), "New node", blankConfig()))
+        }
+        val selectedId = current.selectedProfileId.takeIf { selected ->
+            profiles.any { it.id == selected }
+        } ?: profiles.first().id
+        return persist(
+            current.copy(
+                profiles = profiles,
+                selectedProfileId = selectedId,
+                subscriptions = current.subscriptions.filterNot { it.id == id }
+            )
+        )
     }
 
     private fun createInitialLibrary(): ProfileLibrary {
@@ -153,6 +254,31 @@ class ProfileRepository(
         require(library.profiles.any { it.id == library.selectedProfileId }) {
             "Selected profile does not exist"
         }
+        require(library.subscriptions.map { it.id }.toSet().size == library.subscriptions.size) {
+            "Duplicate subscription id"
+        }
+        val subscriptionIds = library.subscriptions.mapTo(mutableSetOf()) { it.id }
+        library.profiles.filter(ServerProfile::isSubscriptionManaged).forEach { profile ->
+            require(profile.subscriptionId in subscriptionIds) {
+                "Subscription node has no source"
+            }
+            require(profile.subscriptionNodeKey.isNotBlank()) {
+                "Subscription node key is required"
+            }
+        }
+        require(
+            library.profiles.filter(ServerProfile::isSubscriptionManaged)
+                .map { it.subscriptionId to it.subscriptionNodeKey }
+                .toSet().size ==
+                library.profiles.count(ServerProfile::isSubscriptionManaged)
+        ) { "Duplicate subscription node key" }
+    }
+
+    private fun validateSubscriptionUrl(raw: String) {
+        val uri = runCatching { URI(raw.trim()) }.getOrNull()
+        require(uri != null && uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank()) {
+            "A valid HTTP(S) subscription URL is required"
+        }
     }
 
     private fun uniqueId(existing: Set<String>): String {
@@ -171,6 +297,9 @@ class ProfileRepository(
         })
         put("stunServers", JSONArray().apply {
             library.stunServers.forEach { put(JSONObject(it.toMap())) }
+        })
+        put("subscriptions", JSONArray().apply {
+            library.subscriptions.forEach { put(JSONObject(it.toMap())) }
         })
     }.toString()
 
@@ -194,7 +323,13 @@ class ProfileRepository(
                 if (config.serverHost.isBlank()) "Saved server"
                 else "${config.serverHost}:${config.serverPort}"
             }
-            ServerProfile(id, name, config)
+            ServerProfile(
+                id = id,
+                name = name,
+                config = config,
+                subscriptionId = json.optString("subscriptionId"),
+                subscriptionNodeKey = json.optString("subscriptionNodeKey")
+            )
         }
         require(profiles.isNotEmpty()) { "At least one profile is required" }
         val requestedSelected = root.optString("selectedProfileId")
@@ -214,11 +349,33 @@ class ProfileRepository(
                 enabled = json.optBoolean("enabled", true)
             )
         }
+        val usedSubscriptionIds = mutableSetOf<String>()
+        val subscriptions = root.optJSONArray("subscriptions")?.objects().orEmpty().map { json ->
+            val requestedId = json.optString("id")
+            val id = if (requestedId.isNotBlank() && usedSubscriptionIds.add(requestedId)) {
+                requestedId
+            } else {
+                uniqueId(usedSubscriptionIds).also(usedSubscriptionIds::add)
+            }
+            SubscriptionSource(
+                id = id,
+                name = json.optString("name").trim().ifBlank { "Subscription" },
+                url = json.optString("url"),
+                updatedAtMillis = json.optLong("updatedAtMillis"),
+                nodeCount = json.optInt("nodeCount")
+            )
+        }
+        val validSubscriptionIds = subscriptions.mapTo(mutableSetOf()) { it.id }
+        val normalizedProfiles = profiles.map { profile ->
+            if (profile.subscriptionId in validSubscriptionIds) profile
+            else profile.copy(subscriptionId = "", subscriptionNodeKey = "")
+        }
         return ProfileLibrary(
             schemaVersion = ProfileLibrary.CURRENT_SCHEMA_VERSION,
-            profiles = profiles,
+            profiles = normalizedProfiles,
             selectedProfileId = selected,
-            stunServers = stunServers
+            stunServers = stunServers,
+            subscriptions = subscriptions
         )
     }
 

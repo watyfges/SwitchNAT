@@ -10,6 +10,7 @@ import dev.switchnat.app.config.ShadowsocksConfig
 import dev.switchnat.app.config.ProfileRepository
 import dev.switchnat.app.config.ServerProfile
 import dev.switchnat.app.config.StunServerEndpoint
+import dev.switchnat.app.config.SubscriptionNode
 import dev.switchnat.app.config.profileRepository
 import dev.switchnat.app.diagnostics.Diagnostics
 import dev.switchnat.app.diagnostics.DiagnosticsHub
@@ -76,6 +77,21 @@ class NativeBridge(
             }
             "saveStunServers" -> mutateLibrary(result) {
                 repository.saveStunServers(stunServersFromCall(call))
+            }
+            "syncSubscription" -> mutateLibrary(result) {
+                val args = stringMap(call.arguments)
+                repository.syncSubscription(
+                    requestedId = (args["id"] as? String).orEmpty(),
+                    name = (args["name"] as? String).orEmpty(),
+                    url = (args["url"] as? String).orEmpty(),
+                    nodes = subscriptionNodesFromCall(call)
+                )
+            }
+            "deleteSubscription" -> mutateLibrary(result) {
+                repository.deleteSubscription(
+                    requiredString(call, "id"),
+                    diagnostics.snapshot().activeProfileId
+                )
             }
             "loadDefaultUdpTargets" -> result.success(repository.defaultUdpTargets())
             "runTcpTest" -> {
@@ -248,6 +264,20 @@ class NativeBridge(
                 host = (server["host"] as? String).orEmpty(),
                 port = (server["port"] as? Number)?.toInt() ?: 0,
                 enabled = server["enabled"] as? Boolean ?: true
+            )
+        }
+    }
+
+    private fun subscriptionNodesFromCall(call: MethodCall): List<SubscriptionNode> {
+        val values = stringMap(call.arguments)["nodes"] as? List<*>
+            ?: throw IllegalArgumentException("nodes list is required")
+        return values.map { value ->
+            val node = stringMap(value)
+            val config = ShadowsocksConfig.fromMap(stringMap(node["config"]))
+            SubscriptionNode(
+                nodeKey = (node["nodeKey"] as? String).orEmpty(),
+                name = (node["name"] as? String).orEmpty(),
+                config = config
             )
         }
     }

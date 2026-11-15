@@ -12,6 +12,11 @@ class AppStrings {
 
   String rules(int count) => isChinese ? '$count 条规则' : '$count rules';
   String servers(int count) => isChinese ? '$count 个服务器' : '$count servers';
+  String nodes(int count) =>
+      isChinese ? '$count 个节点' : '$count ${count == 1 ? 'node' : 'nodes'}';
+  String subscriptions(int count) => isChinese
+      ? '$count 个订阅'
+      : '$count ${count == 1 ? 'subscription' : 'subscriptions'}';
 }
 
 extension AppStringsContext on BuildContext {
@@ -48,6 +53,24 @@ const Map<String, String> _zh = <String, String>{
   'Not tested': '尚未测试',
   'Restart the service to use the selected node.': '重启服务后才会使用新选择的节点。',
   'Node settings': '节点设置',
+  'Subscriptions': '订阅',
+  'Manage': '管理',
+  'Manage subscriptions': '管理订阅',
+  'Add subscription': '添加订阅',
+  'Edit subscription': '编辑订阅',
+  'Subscription name': '订阅名称',
+  'Subscription URL': '订阅地址',
+  'Update': '更新',
+  'Update all': '全部更新',
+  'No subscriptions': '暂无订阅',
+  'Add a Clash subscription to import nodes.': '添加 Clash 订阅以导入节点。',
+  'Delete subscription': '删除订阅',
+  'Delete this subscription and all imported nodes?': '删除此订阅及其导入的全部节点？',
+  'Managed by subscription': '由订阅管理',
+  'Last updated': '上次更新',
+  'Never updated': '尚未更新',
+  'Subscription nodes are read-only. Update them from subscription management.':
+      '订阅节点为只读，请在订阅管理中更新。',
   'New': '新建',
   'More node actions': '更多节点操作',
   'Rename': '重命名',
@@ -77,6 +100,7 @@ const Map<String, String> _zh = <String, String>{
   'Cancel': '取消',
   'Add STUN server': '添加 STUN 服务器',
   'Save': '保存',
+  'Edit': '编辑',
   'Connection': '连接',
   'Hotspot gateway': '热点网关',
   'Proxy address': '代理地址',

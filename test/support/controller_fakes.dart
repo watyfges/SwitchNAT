@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:switchnat/src/config/config_store.dart';
 import 'package:switchnat/src/config/profile_library.dart';
+import 'package:switchnat/src/config/subscription_service.dart';
 import 'package:switchnat/src/native/native_bridge.dart';
 import 'package:switchnat/src/state/service_status.dart';
 
@@ -49,6 +50,7 @@ class MemoryConfigStore implements ConfigStore {
           .toList(),
       selectedProfileId: value.selectedProfileId,
       stunServers: value.stunServers,
+      subscriptions: value.subscriptions,
     );
     return value;
   }
@@ -60,6 +62,7 @@ class MemoryConfigStore implements ConfigStore {
       profiles: value.profiles,
       selectedProfileId: id,
       stunServers: value.stunServers,
+      subscriptions: value.subscriptions,
     );
     return value;
   }
@@ -83,9 +86,21 @@ class MemoryConfigStore implements ConfigStore {
       profiles: value.profiles,
       selectedProfileId: value.selectedProfileId,
       stunServers: servers,
+      subscriptions: value.subscriptions,
     );
     return value;
   }
+
+  @override
+  Future<ProfileLibrary> syncSubscription({
+    required String id,
+    required String name,
+    required String url,
+    required List<ImportedSubscriptionNode> nodes,
+  }) async => value;
+
+  @override
+  Future<ProfileLibrary> deleteSubscription(String id) async => value;
 
   @override
   Future<String> loadDefaultUdpTargets() async => '';

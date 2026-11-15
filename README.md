@@ -31,6 +31,7 @@ SwitchNAT 将 TCP 和 UDP 分成两条路径：
 - 动态 P2P endpoint alias 学习、复用、超时和容量回收。
 - 按 Switch 源 IP:port 复用 UDP relay session，减少目标变化导致的公网端口变化。
 - 多节点的创建、重命名、选择、保存和删除。
+- 支持添加、编辑、单独更新、全部更新和删除多个 Clash YAML 订阅；当前导入 Shadowsocks 与 VLESS + Reality 节点。
 - 支持 VLESS + Reality（RAW、Vision/无 flow），TCP 与 UDP 共用内置 Xray Core 出站。
 - 中英文界面，跟随 Android 系统语言自动切换。
 - 支持 aes-128-gcm、aes-256-gcm 和 chacha20-ietf-poly1305。
@@ -85,7 +86,7 @@ flutter build apk --debug
 flutter build apk --release --split-per-abi
 ~~~
 
-当前 release 构建仍使用 debug signing config，仅适合个人测试。正式分发前应配置独立 release keystore，且不得将 keystore 或密码提交到仓库。
+本地未提供签名环境变量时，release 构建会回退到 debug signing，仅适合个人测试。Tag release 由 GitHub Actions 使用仓库 Secrets 中配置的旧版兼容 release keystore 签名；keystore 和密码不会提交到仓库。
 
 Android JVM 测试：
 
@@ -98,14 +99,15 @@ CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建
 
 ## 使用方法
 
-1. 在 Config 页面创建或选择一个节点，选择 Shadowsocks 或 VLESS + Reality，并填写对应字段与 HTTP proxy port。
-2. 检查预置 UDP targets；它们负责 bootstrap 固定服务端流量，可按实际抓包结果修改。
-3. 按需编辑全局 STUN 服务器列表并保存节点。
-4. 打开手机热点，让 Switch 连接该热点。
-5. 在 Switch 网络设置中，把 HTTP 代理地址设为 App 显示的热点网关，端口设为节点配置的 proxy port。
-6. 回到首页启动 SwitchNAT，并授予 VPN 和通知权限。
-7. 服务启动后等待自动 TCP/STUN 测试；点击对应状态卡可以重新测试。
-8. 在 Switch 上执行连接测试或进入游戏，并通过 Status/Logs 页面观察 UDP flow、peer alias、错误和最近包元数据。
+1. 在 Config 页面手动创建节点，或打开“订阅”管理添加 Clash YAML 订阅。订阅支持单独更新和全部更新，导入节点为只读。
+2. 选择一个 Shadowsocks 或 VLESS + Reality 节点；手动节点需要填写对应字段与 HTTP proxy port。
+3. 检查预置 UDP targets；它们负责 bootstrap 固定服务端流量，可按实际抓包结果修改。
+4. 按需编辑全局 STUN 服务器列表并保存节点。
+5. 打开手机热点，让 Switch 连接该热点。
+6. 在 Switch 网络设置中，把 HTTP 代理地址设为 App 显示的热点网关，端口设为节点配置的 proxy port。
+7. 回到首页启动 SwitchNAT，并授予 VPN 和通知权限。
+8. 服务启动后等待自动 TCP/STUN 测试；点击对应状态卡可以重新测试。
+9. 在 Switch 上执行连接测试或进入游戏，并通过 Status/Logs 页面观察 UDP flow、peer alias、错误和最近包元数据。
 
 运行期间选择其他节点不会静默切换当前 session；停止并重新启动服务后才会应用新节点。
 
@@ -119,13 +121,14 @@ CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建
 - TCP 需要在 Switch 上手动配置 HTTP 代理，不是透明 TCP VPN。
 - 动态 alias 依赖已经建立的 UDP relay session，不能从完全未知且从未到达的流量中凭空发现玩家。
 - 当前 VLESS 支持范围是 RAW + Reality；UDP 使用每个 Switch flow 对应的 SOCKS UDP association/VLESS UoT，不强制开启 XUDP Mux。
+- 订阅解析当前面向 Clash YAML，仅导入受支持加密方式的 Shadowsocks 和 TCP/RAW VLESS + Reality；其他协议会跳过。
 - STUN 服务端必须支持测试所需属性；只返回基础 Binding 响应时可能显示 partial result。
 - Android 厂商可能限制热点流量进入 VPN、本地地址绑定、前台服务或 Live Updates。
 - NAT A、匹配成功率、延迟和稳定性取决于服务端、运营商、游戏协议及其他外部条件。
 
 ## 安全与隐私
 
-- 节点配置保存在 App 私有的 SharedPreferences 中，但当前未额外使用硬件密钥加密。
+- 节点配置和订阅地址保存在 App 私有的 SharedPreferences 中，但当前未额外使用硬件密钥加密。订阅列表只显示域名，完整地址仅在编辑时显示。
 - App 不提供或上传公共代理节点；用户需要自行管理服务端和凭据。
 - 诊断 packet sample 只记录时间、协议、源/目标、方向和结果，不记录 payload。
 - 发布 issue、日志或抓包前，请删除密码、服务器地址、设备标识、公网 IP 和其他个人信息。

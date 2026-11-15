@@ -1,8 +1,44 @@
 package dev.switchnat.app.config
 
-data class ServerProfile(val id: String, val name: String, val config: ShadowsocksConfig) {
-    fun toMap(): Map<String, Any> = mapOf("id" to id, "name" to name, "config" to config.toMap())
+data class ServerProfile(
+    val id: String,
+    val name: String,
+    val config: ShadowsocksConfig,
+    val subscriptionId: String = "",
+    val subscriptionNodeKey: String = ""
+) {
+    val isSubscriptionManaged: Boolean get() = subscriptionId.isNotBlank()
+
+    fun toMap(): Map<String, Any> = mapOf(
+        "id" to id,
+        "name" to name,
+        "config" to config.toMap(),
+        "subscriptionId" to subscriptionId,
+        "subscriptionNodeKey" to subscriptionNodeKey
+    )
 }
+
+data class SubscriptionSource(
+    val id: String,
+    val name: String,
+    val url: String,
+    val updatedAtMillis: Long,
+    val nodeCount: Int
+) {
+    fun toMap(): Map<String, Any> = mapOf(
+        "id" to id,
+        "name" to name,
+        "url" to url,
+        "updatedAtMillis" to updatedAtMillis,
+        "nodeCount" to nodeCount
+    )
+}
+
+data class SubscriptionNode(
+    val nodeKey: String,
+    val name: String,
+    val config: ShadowsocksConfig
+)
 
 data class StunServerEndpoint(
     val id: String,
@@ -24,7 +60,8 @@ data class ProfileLibrary(
     val schemaVersion: Int = CURRENT_SCHEMA_VERSION,
     val profiles: List<ServerProfile>,
     val selectedProfileId: String,
-    val stunServers: List<StunServerEndpoint>
+    val stunServers: List<StunServerEndpoint>,
+    val subscriptions: List<SubscriptionSource> = emptyList()
 ) {
     val selectedProfile: ServerProfile get() = profiles.first { it.id == selectedProfileId }
 
@@ -32,11 +69,12 @@ data class ProfileLibrary(
         "schemaVersion" to schemaVersion,
         "profiles" to profiles.map(ServerProfile::toMap),
         "selectedProfileId" to selectedProfileId,
-        "stunServers" to stunServers.map(StunServerEndpoint::toMap)
+        "stunServers" to stunServers.map(StunServerEndpoint::toMap),
+        "subscriptions" to subscriptions.map(SubscriptionSource::toMap)
     )
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 2
+        const val CURRENT_SCHEMA_VERSION = 3
     }
 }
 

@@ -5,30 +5,80 @@ class ServerProfile {
     required this.id,
     required this.name,
     required this.config,
+    this.subscriptionId = '',
+    this.subscriptionNodeKey = '',
   });
 
   final String id;
   final String name;
   final SsConfig config;
+  final String subscriptionId;
+  final String subscriptionNodeKey;
+
+  bool get isSubscriptionManaged => subscriptionId.isNotEmpty;
 
   factory ServerProfile.fromJson(Map<String, Object?> json) => ServerProfile(
     id: json['id'] as String? ?? '',
     name: json['name'] as String? ?? '',
     config: SsConfig.fromJson(_stringMap(json['config'])),
+    subscriptionId: json['subscriptionId'] as String? ?? '',
+    subscriptionNodeKey: json['subscriptionNodeKey'] as String? ?? '',
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
     'name': name,
     'config': config.toJson(),
+    'subscriptionId': subscriptionId,
+    'subscriptionNodeKey': subscriptionNodeKey,
   };
 
-  ServerProfile copyWith({String? id, String? name, SsConfig? config}) =>
-      ServerProfile(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        config: config ?? this.config,
+  ServerProfile copyWith({
+    String? id,
+    String? name,
+    SsConfig? config,
+    String? subscriptionId,
+    String? subscriptionNodeKey,
+  }) => ServerProfile(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    config: config ?? this.config,
+    subscriptionId: subscriptionId ?? this.subscriptionId,
+    subscriptionNodeKey: subscriptionNodeKey ?? this.subscriptionNodeKey,
+  );
+}
+
+class SubscriptionSource {
+  const SubscriptionSource({
+    required this.id,
+    required this.name,
+    required this.url,
+    required this.updatedAtMillis,
+    required this.nodeCount,
+  });
+
+  final String id;
+  final String name;
+  final String url;
+  final int updatedAtMillis;
+  final int nodeCount;
+
+  factory SubscriptionSource.fromJson(Map<String, Object?> json) =>
+      SubscriptionSource(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        updatedAtMillis: json['updatedAtMillis'] as int? ?? 0,
+        nodeCount: json['nodeCount'] as int? ?? 0,
       );
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'name': name,
+    'url': url,
+    'updatedAtMillis': updatedAtMillis,
+    'nodeCount': nodeCount,
+  };
 }
 
 class StunServerEndpoint {
@@ -78,12 +128,14 @@ class ProfileLibrary {
     required this.profiles,
     required this.selectedProfileId,
     required this.stunServers,
+    this.subscriptions = const <SubscriptionSource>[],
   });
 
   final int schemaVersion;
   final List<ServerProfile> profiles;
   final String selectedProfileId;
   final List<StunServerEndpoint> stunServers;
+  final List<SubscriptionSource> subscriptions;
 
   ServerProfile get selectedProfile =>
       profiles.firstWhere((profile) => profile.id == selectedProfileId);
@@ -97,6 +149,9 @@ class ProfileLibrary {
     stunServers: _objectList(json['stunServers'])
         .map((value) => StunServerEndpoint.fromJson(_stringMap(value)))
         .toList(growable: false),
+    subscriptions: _objectList(json['subscriptions'])
+        .map((value) => SubscriptionSource.fromJson(_stringMap(value)))
+        .toList(growable: false),
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -104,6 +159,7 @@ class ProfileLibrary {
     'profiles': profiles.map((profile) => profile.toJson()).toList(),
     'selectedProfileId': selectedProfileId,
     'stunServers': stunServers.map((server) => server.toJson()).toList(),
+    'subscriptions': subscriptions.map((source) => source.toJson()).toList(),
   };
 }
 

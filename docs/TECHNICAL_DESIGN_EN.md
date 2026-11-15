@@ -66,13 +66,16 @@ Flutter uses two channels:
 - <code>dev.switchnat.app/control</code> requests VPN/notification permissions, loads or saves configuration, starts or stops the service, and runs diagnostics.
 - <code>dev.switchnat.app/status</code> continuously publishes <code>DiagnosticsSnapshot</code>.
 
-<code>ProfileRepository</code> stores a schema-version-2 profile library in app-private SharedPreferences and can read version 1. The library contains:
+<code>ProfileRepository</code> stores a schema-version-3 profile library in app-private SharedPreferences and can read versions 1 and 2. The library contains:
 
 - One or more Shadowsocks/VLESS Reality profiles.
 - The selected profile ID.
 - A global shared STUN server list.
+- Multiple subscription sources and the source/stable-node-key relationship for imported profiles.
 
 A profile contains the protocol, host, port, HTTP proxy port, UDP targets, and protocol-specific fields. Shadowsocks uses a password and AEAD method. VLESS Reality uses UUID, flow, SNI, Reality public key, short ID, fingerprint, and spider path. First launch creates a blank profile with bundled UDP targets and four default STUN endpoints. Legacy single-node settings are migrated into the profile library.
+
+<code>SubscriptionService</code> downloads and parses Clash YAML in Flutter. It accepts HTTP(S) only, uses a 20-second timeout, and limits responses to 2 MiB. It currently supports the listed Shadowsocks AEAD ciphers and TCP/RAW VLESS + Reality. A SHA-256 key derived from protocol identity fields gives each imported node a stable identity. Android replaces a subscription's cached profiles only after the download and full parse succeed, so failures retain the previous cache. Refresh preserves matching profile IDs and selection; the first import automatically selects a subscription node when the current profile is blank.
 
 The active profile ID is recorded in the diagnostic session. Selecting another profile while the service is running marks a pending change in the UI but does not replace live sockets. The service must be stopped and restarted.
 
@@ -217,7 +220,7 @@ The flow map is a ConcurrentHashMap. The alias map is accessed under a lock. Sen
 
 - No root, persistent ADB permission, or privileged system API is required.
 - App outbound sockets must be protected against VPN routing loops.
-- Profiles are stored in MODE_PRIVATE SharedPreferences without additional hardware-backed encryption.
+- Profiles and subscription URLs are stored in MODE_PRIVATE SharedPreferences without additional hardware-backed encryption; subscription lists render only the URL host.
 - The Android application sets <code>allowBackup=false</code>.
 - Packet samples omit payloads, but endpoint and IP metadata may still be sensitive.
 - The project contains no user Shadowsocks server, password, signing material, or telemetry upload.

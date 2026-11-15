@@ -114,12 +114,76 @@ class ProfileRepositoryTest {
         assertEquals("198.51.100.9:8123", library.selectedProfile.config.udpTargets)
     }
 
+    @Test
+    fun subscriptionRefreshPreservesMatchingProfileAndReplacesRemovedNodes() {
+        val store = FakePreferenceStore()
+        val repository = repository(store)
+        repository.load()
+        val imported = repository.syncSubscription(
+            requestedId = "",
+            name = "Main subscription",
+            url = "https://example.com/subscription",
+            nodes = listOf(subscriptionNode("a", "Tokyo", "203.0.113.10"), subscriptionNode("b", "Osaka", "203.0.113.11"))
+        )
+        val source = imported.subscriptions.single()
+        val tokyo = imported.profiles.first { it.subscriptionNodeKey == "a" }
+        assertEquals(tokyo.id, imported.selectedProfileId)
+        repository.selectProfile(tokyo.id)
+
+        val refreshed = repository.syncSubscription(
+            requestedId = source.id,
+            name = "Main subscription",
+            url = "https://example.com/subscription",
+            nodes = listOf(subscriptionNode("a", "Tokyo updated", "203.0.113.20"), subscriptionNode("c", "Seoul", "203.0.113.12"))
+        )
+
+        assertEquals(tokyo.id, refreshed.selectedProfileId)
+        assertEquals(tokyo.id, refreshed.profiles.first { it.subscriptionNodeKey == "a" }.id)
+        assertEquals("Tokyo updated", refreshed.selectedProfile.name)
+        assertFalse(refreshed.profiles.any { it.subscriptionNodeKey == "b" })
+        assertEquals(2, refreshed.subscriptions.single().nodeCount)
+        assertEquals(1234L, refreshed.subscriptions.single().updatedAtMillis)
+        assertEquals(2, repository(store).load().profiles.count { it.isSubscriptionManaged })
+    }
+
+    @Test
+    fun deletingSubscriptionRemovesManagedNodesButKeepsManualProfile() {
+        val repository = repository(FakePreferenceStore())
+        val initial = repository.load()
+        val imported = repository.syncSubscription(
+            requestedId = "",
+            name = "Main subscription",
+            url = "https://example.com/subscription",
+            nodes = listOf(subscriptionNode("a", "Tokyo", "203.0.113.10"))
+        )
+
+        val deleted = repository.deleteSubscription(imported.subscriptions.single().id)
+
+        assertTrue(deleted.subscriptions.isEmpty())
+        assertEquals(listOf(initial.selectedProfileId), deleted.profiles.map { it.id })
+        assertFalse(deleted.selectedProfile.isSubscriptionManaged)
+    }
+
+    private fun subscriptionNode(key: String, name: String, host: String) = SubscriptionNode(
+        nodeKey = key,
+        name = name,
+        config = ShadowsocksConfig(
+            serverHost = host,
+            serverPort = 8388,
+            password = "secret",
+            method = "aes-256-gcm",
+            httpProxyPort = 7890,
+            udpTargets = DEFAULT_TARGETS
+        )
+    )
+
     private fun repository(store: FakePreferenceStore): ProfileRepository {
         val ids = generateSequence(1) { it + 1 }.map { "profile-$it" }.iterator()
         return ProfileRepository(
             store = store,
             defaultTargets = { DEFAULT_TARGETS },
-            nextId = ids::next
+            nextId = ids::next,
+            nowMillis = { 1234L }
         )
     }
 

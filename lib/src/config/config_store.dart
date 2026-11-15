@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'profile_library.dart';
+import 'subscription_service.dart';
 
 abstract interface class ConfigStore {
   Future<ProfileLibrary> loadLibrary();
@@ -10,6 +11,13 @@ abstract interface class ConfigStore {
   Future<ProfileLibrary> renameProfile(String id, String name);
   Future<ProfileLibrary> deleteProfile(String id);
   Future<ProfileLibrary> saveStunServers(List<StunServerEndpoint> servers);
+  Future<ProfileLibrary> syncSubscription({
+    required String id,
+    required String name,
+    required String url,
+    required List<ImportedSubscriptionNode> nodes,
+  });
+  Future<ProfileLibrary> deleteSubscription(String id);
   Future<String> loadDefaultUdpTargets();
 }
 
@@ -47,6 +55,23 @@ class MethodChannelConfigStore implements ConfigStore {
       _libraryCall('saveStunServers', <String, Object?>{
         'servers': servers.map((server) => server.toJson()).toList(),
       });
+
+  @override
+  Future<ProfileLibrary> syncSubscription({
+    required String id,
+    required String name,
+    required String url,
+    required List<ImportedSubscriptionNode> nodes,
+  }) => _libraryCall('syncSubscription', <String, Object?>{
+    'id': id,
+    'name': name,
+    'url': url,
+    'nodes': nodes.map((node) => node.toJson()).toList(),
+  });
+
+  @override
+  Future<ProfileLibrary> deleteSubscription(String id) =>
+      _libraryCall('deleteSubscription', <String, Object?>{'id': id});
 
   @override
   Future<String> loadDefaultUdpTargets() async =>

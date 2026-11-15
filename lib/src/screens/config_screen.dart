@@ -79,6 +79,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
         return const Center(child: CircularProgressIndicator());
       }
       final profile = library.selectedProfile;
+      final isManaged = profile.isSubscriptionManaged;
       final displayName = _displayName(profile);
       final ruleCount = targets.text
           .split(RegExp(r'\s+'))
@@ -92,6 +93,22 @@ class _ConfigScreenState extends State<ConfigScreen> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
+          Card(
+            key: const Key('subscription-summary'),
+            child: ListTile(
+              contentPadding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+              leading: const Icon(Icons.cloud_sync_outlined),
+              title: Text(context.tr('Subscriptions')),
+              subtitle: Text(
+                strings.subscriptions(library.subscriptions.length),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: widget.controller.busy
+                  ? null
+                  : () => _manageSubscriptions(),
+            ),
+          ),
+          const SizedBox(height: 10),
           Card(
             key: const Key('profile-summary'),
             child: ListTile(
@@ -119,27 +136,44 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     icon: const Icon(Icons.add),
                     label: Text(context.tr('New')),
                   ),
-                  PopupMenuButton<_ProfileAction>(
-                    tooltip: context.tr('More node actions'),
-                    enabled: !widget.controller.busy,
-                    onSelected: (action) =>
-                        _runProfileAction(action, profile, library),
-                    itemBuilder: (_) => <PopupMenuEntry<_ProfileAction>>[
-                      PopupMenuItem<_ProfileAction>(
-                        value: _ProfileAction.rename,
-                        child: Text(context.tr('Rename')),
-                      ),
-                      PopupMenuItem<_ProfileAction>(
-                        value: _ProfileAction.delete,
-                        enabled: library.profiles.length > 1,
-                        child: Text(context.tr('Delete')),
-                      ),
-                    ],
-                  ),
+                  if (!isManaged)
+                    PopupMenuButton<_ProfileAction>(
+                      tooltip: context.tr('More node actions'),
+                      enabled: !widget.controller.busy,
+                      onSelected: (action) =>
+                          _runProfileAction(action, profile, library),
+                      itemBuilder: (_) => <PopupMenuEntry<_ProfileAction>>[
+                        PopupMenuItem<_ProfileAction>(
+                          value: _ProfileAction.rename,
+                          child: Text(context.tr('Rename')),
+                        ),
+                        PopupMenuItem<_ProfileAction>(
+                          value: _ProfileAction.delete,
+                          enabled: library.profiles.length > 1,
+                          child: Text(context.tr('Delete')),
+                        ),
+                      ],
+                    ),
                 ],
               ),
             ),
           ),
+          if (isManaged) ...<Widget>[
+            const SizedBox(height: 8),
+            Card(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.lock_outline),
+                title: Text(context.tr('Managed by subscription')),
+                subtitle: Text(
+                  context.tr(
+                    'Subscription nodes are read-only. Update them from subscription management.',
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             key: ValueKey<String>('protocol-$loadedId'),
@@ -155,13 +189,16 @@ class _ConfigScreenState extends State<ConfigScreen> {
                 child: Text('VLESS + Reality'),
               ),
             ],
-            onChanged: (value) => setState(
-              () => protocol = value ?? SsConfig.protocolShadowsocks,
-            ),
+            onChanged: isManaged
+                ? null
+                : (value) => setState(
+                    () => protocol = value ?? SsConfig.protocolShadowsocks,
+                  ),
           ),
           const SizedBox(height: 10),
           TextField(
             controller: host,
+            readOnly: isManaged,
             decoration: _fieldDecoration(context.tr('Host')),
           ),
           const SizedBox(height: 10),
@@ -170,6 +207,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
               Expanded(
                 child: TextField(
                   controller: port,
+                  readOnly: isManaged,
                   keyboardType: TextInputType.number,
                   decoration: _fieldDecoration(context.tr('Port')),
                 ),
@@ -178,6 +216,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
               Expanded(
                 child: TextField(
                   controller: proxyPort,
+                  readOnly: isManaged,
                   keyboardType: TextInputType.number,
                   decoration: _fieldDecoration(context.tr('Proxy port')),
                 ),
@@ -188,6 +227,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
           if (protocol == SsConfig.protocolShadowsocks) ...<Widget>[
             TextField(
               controller: password,
+              readOnly: isManaged,
               obscureText: true,
               decoration: _fieldDecoration(context.tr('Password')),
             ),
@@ -205,41 +245,50 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     ),
                   )
                   .toList(),
-              onChanged: (value) => setState(() => method = value ?? method),
+              onChanged: isManaged
+                  ? null
+                  : (value) => setState(() => method = value ?? method),
             ),
           ] else ...<Widget>[
             TextField(
               controller: uuid,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('UUID')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: serverName,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Server name (SNI)')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: publicKey,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Reality public key')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: shortId,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Reality short ID')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: flow,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Flow')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: fingerprint,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Fingerprint')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: spiderX,
+              readOnly: isManaged,
               decoration: _fieldDecoration(context.tr('Spider path')),
             ),
           ],
@@ -266,6 +315,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                     child: TextField(
                       controller: targets,
+                      readOnly: isManaged,
                       minLines: 8,
                       maxLines: 14,
                       decoration: _fieldDecoration(
@@ -329,7 +379,9 @@ class _ConfigScreenState extends State<ConfigScreen> {
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
-            onPressed: widget.controller.busy ? null : () => _save(profile),
+            onPressed: widget.controller.busy || isManaged
+                ? null
+                : () => _save(profile),
             icon: const Icon(Icons.save_outlined),
             label: Text(context.tr('Save changes')),
           ),
@@ -370,7 +422,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
                               : Icons.circle_outlined,
                         ),
                         title: Text(_displayName(profile)),
-                        subtitle: Text(_endpointLabel(profile)),
+                        subtitle: Text(_profileSubtitle(profile, library)),
                         onTap: () => Navigator.pop(context, profile.id),
                       ),
                     )
@@ -399,6 +451,22 @@ class _ConfigScreenState extends State<ConfigScreen> {
       profile.config.serverHost.trim().isEmpty || profile.config.serverPort <= 0
       ? context.tr('Not configured')
       : '${profile.config.serverHost}:${profile.config.serverPort}';
+
+  String _profileSubtitle(ServerProfile profile, ProfileLibrary library) {
+    final endpoint = _endpointLabel(profile);
+    if (!profile.isSubscriptionManaged) return endpoint;
+    final source = library.subscriptions
+        .where((item) => item.id == profile.subscriptionId)
+        .firstOrNull;
+    return source == null ? endpoint : '$endpoint · ${source.name}';
+  }
+
+  Future<void> _manageSubscriptions() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _SubscriptionManager(controller: widget.controller),
+  );
 
   Future<void> _runProfileAction(
     _ProfileAction action,
@@ -578,4 +646,305 @@ class _StunEditorDialogState extends State<_StunEditorDialog> {
       ),
     ],
   );
+}
+
+class _SubscriptionManager extends StatelessWidget {
+  const _SubscriptionManager({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) => FractionallySizedBox(
+    heightFactor: 0.82,
+    child: AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final library = controller.library;
+        final sources = library?.subscriptions ?? const <SubscriptionSource>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(
+                      context.tr('Manage subscriptions'),
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: context.tr('Update all'),
+                    onPressed: controller.busy || sources.isEmpty
+                        ? null
+                        : controller.refreshAllSubscriptions,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                  IconButton(
+                    tooltip: context.tr('Add subscription'),
+                    onPressed: controller.busy ? null : () => _edit(context),
+                    icon: const Icon(Icons.add),
+                  ),
+                  IconButton(
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            if (controller.busy) const LinearProgressIndicator(),
+            if (controller.feedback.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                child: Text(
+                  controller.feedback,
+                  style: TextStyle(
+                    color: controller.feedback.startsWith('Operation failed:')
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+            if (sources.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        const Icon(Icons.cloud_off_outlined, size: 42),
+                        const SizedBox(height: 12),
+                        Text(context.tr('No subscriptions')),
+                        const SizedBox(height: 4),
+                        Text(
+                          context.tr(
+                            'Add a Clash subscription to import nodes.',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: controller.busy
+                              ? null
+                              : () => _edit(context),
+                          icon: const Icon(Icons.add),
+                          label: Text(context.tr('Add subscription')),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
+            else
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                  itemCount: sources.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final source = sources[index];
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.cloud_done_outlined),
+                        title: Text(
+                          source.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${context.strings.nodes(source.nodeCount)} · '
+                          '${_subscriptionHost(source.url)}\n'
+                          '${context.tr('Last updated')}: '
+                          '${_formatUpdated(source.updatedAtMillis)}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        isThreeLine: true,
+                        trailing: PopupMenuButton<_SubscriptionAction>(
+                          enabled: !controller.busy,
+                          onSelected: (action) =>
+                              _runAction(context, action, source),
+                          itemBuilder: (_) =>
+                              <PopupMenuEntry<_SubscriptionAction>>[
+                                PopupMenuItem<_SubscriptionAction>(
+                                  value: _SubscriptionAction.update,
+                                  child: Text(context.tr('Update')),
+                                ),
+                                PopupMenuItem<_SubscriptionAction>(
+                                  value: _SubscriptionAction.edit,
+                                  child: Text(context.tr('Edit')),
+                                ),
+                                PopupMenuItem<_SubscriptionAction>(
+                                  value: _SubscriptionAction.delete,
+                                  child: Text(context.tr('Delete')),
+                                ),
+                              ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    ),
+  );
+
+  Future<void> _runAction(
+    BuildContext context,
+    _SubscriptionAction action,
+    SubscriptionSource source,
+  ) async {
+    switch (action) {
+      case _SubscriptionAction.update:
+        await controller.syncSubscription(
+          id: source.id,
+          name: source.name,
+          url: source.url,
+        );
+      case _SubscriptionAction.edit:
+        await _edit(context, source);
+      case _SubscriptionAction.delete:
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(context.tr('Delete subscription')),
+            content: Text(
+              context.tr('Delete this subscription and all imported nodes?'),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(context.tr('Cancel')),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(context.tr('Delete')),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) {
+          await controller.deleteSubscription(source.id);
+        }
+    }
+  }
+
+  Future<void> _edit(
+    BuildContext context, [
+    SubscriptionSource? existing,
+  ]) async {
+    final draft = await showDialog<_SubscriptionDraft>(
+      context: context,
+      builder: (context) => _SubscriptionEditorDialog(existing: existing),
+    );
+    if (draft == null) return;
+    await controller.syncSubscription(
+      id: existing?.id ?? '',
+      name: draft.name,
+      url: draft.url,
+    );
+  }
+}
+
+enum _SubscriptionAction { update, edit, delete }
+
+class _SubscriptionDraft {
+  const _SubscriptionDraft(this.name, this.url);
+  final String name;
+  final String url;
+}
+
+class _SubscriptionEditorDialog extends StatefulWidget {
+  const _SubscriptionEditorDialog({this.existing});
+  final SubscriptionSource? existing;
+
+  @override
+  State<_SubscriptionEditorDialog> createState() =>
+      _SubscriptionEditorDialogState();
+}
+
+class _SubscriptionEditorDialogState extends State<_SubscriptionEditorDialog> {
+  late final TextEditingController name;
+  late final TextEditingController url;
+
+  @override
+  void initState() {
+    super.initState();
+    name = TextEditingController(text: widget.existing?.name ?? '');
+    url = TextEditingController(text: widget.existing?.url ?? '');
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    url.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(
+      context.tr(
+        widget.existing == null ? 'Add subscription' : 'Edit subscription',
+      ),
+    ),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        TextField(
+          controller: name,
+          autofocus: true,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: context.tr('Subscription name'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: url,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: context.tr('Subscription URL'),
+          ),
+        ),
+      ],
+    ),
+    actions: <Widget>[
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text(context.tr('Cancel')),
+      ),
+      FilledButton(
+        onPressed: name.text.trim().isEmpty || url.text.trim().isEmpty
+            ? null
+            : () => Navigator.pop(
+                context,
+                _SubscriptionDraft(name.text.trim(), url.text.trim()),
+              ),
+        child: Text(context.tr('Save')),
+      ),
+    ],
+  );
+}
+
+String _subscriptionHost(String raw) {
+  final uri = Uri.tryParse(raw);
+  return uri?.host.isNotEmpty == true ? uri!.host : '••••';
+}
+
+String _formatUpdated(int millis) {
+  if (millis <= 0) return '—';
+  final date = DateTime.fromMillisecondsSinceEpoch(millis).toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${date.year}-${two(date.month)}-${two(date.day)} '
+      '${two(date.hour)}:${two(date.minute)}';
 }

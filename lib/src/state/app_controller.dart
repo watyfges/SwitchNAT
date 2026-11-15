@@ -4,14 +4,20 @@ import 'package:flutter/foundation.dart';
 
 import '../config/config_store.dart';
 import '../config/profile_library.dart';
+import '../config/subscription_service.dart';
 import '../native/native_bridge.dart';
 import 'service_status.dart';
 
 class AppController extends ChangeNotifier {
-  AppController({required this.bridge, required this.store});
+  AppController({
+    required this.bridge,
+    required this.store,
+    SubscriptionService? subscriptionService,
+  }) : subscriptionService = subscriptionService ?? SubscriptionService();
 
   final AppBridge bridge;
   final ConfigStore store;
+  final SubscriptionService subscriptionService;
   ProfileLibrary? library;
   ServiceStatus status = ServiceStatus.fromJson(const <Object?, Object?>{});
   bool busy = false;
@@ -69,6 +75,46 @@ class AppController extends ChangeNotifier {
       _mutate(() => store.deleteProfile(id));
   Future<void> saveStunServers(List<StunServerEndpoint> servers) =>
       _mutate(() => store.saveStunServers(servers));
+  Future<void> syncSubscription({
+    required String id,
+    required String name,
+    required String url,
+  }) => _perform(() async {
+    feedback = '';
+    final result = await _downloadSubscription(url);
+    library = await store.syncSubscription(
+      id: id,
+      name: name,
+      url: url,
+      nodes: result.nodes,
+    );
+    feedback = result.skippedCount == 0
+        ? 'Imported ${result.nodes.length} nodes'
+        : 'Imported ${result.nodes.length} nodes; skipped ${result.skippedCount}';
+  });
+  Future<void> refreshAllSubscriptions() => _perform(() async {
+    feedback = '';
+    final sources = List<SubscriptionSource>.from(
+      library?.subscriptions ?? const <SubscriptionSource>[],
+    );
+    var imported = 0;
+    for (final source in sources) {
+      final result = await _downloadSubscription(source.url);
+      library = await store.syncSubscription(
+        id: source.id,
+        name: source.name,
+        url: source.url,
+        nodes: result.nodes,
+      );
+      imported += result.nodes.length;
+    }
+    feedback = 'Updated ${sources.length} subscriptions, $imported nodes';
+  });
+  Future<void> deleteSubscription(String id) => _perform(() async {
+    feedback = '';
+    library = await store.deleteSubscription(id);
+    feedback = 'Subscription deleted';
+  });
   Future<void> runTcpTest() => _perform(() async {
     await bridge.runTcpTest();
   });
@@ -80,6 +126,18 @@ class AppController extends ChangeNotifier {
       _perform(() async {
         library = await mutation();
       });
+
+  Future<SubscriptionImportResult> _downloadSubscription(String url) async {
+    final profile = library?.selectedProfile;
+    final targets = profile?.config.udpTargets.trim().isNotEmpty == true
+        ? profile!.config.udpTargets
+        : await store.loadDefaultUdpTargets();
+    return subscriptionService.download(
+      url: url,
+      udpTargets: targets,
+      httpProxyPort: profile?.config.httpProxyPort ?? 7890,
+    );
+  }
 
   Future<void> _perform(Future<void> Function() action) async {
     busy = true;

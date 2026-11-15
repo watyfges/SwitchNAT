@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:switchnat/src/config/config_store.dart';
 import 'package:switchnat/src/config/profile_library.dart';
+import 'package:switchnat/src/config/subscription_service.dart';
 import 'package:switchnat/src/config/ss_config.dart';
 import 'package:switchnat/src/native/native_bridge.dart';
 import 'package:switchnat/src/state/app_controller.dart';
@@ -120,6 +121,7 @@ class FakeStore implements ConfigStore {
         profiles: value.profiles,
         selectedProfileId: id,
         stunServers: value.stunServers,
+        subscriptions: value.subscriptions,
       );
   @override
   Future<ProfileLibrary> saveProfile(ServerProfile profile) async => value;
@@ -133,6 +135,15 @@ class FakeStore implements ConfigStore {
   Future<ProfileLibrary> saveStunServers(
     List<StunServerEndpoint> servers,
   ) async => value;
+  @override
+  Future<ProfileLibrary> syncSubscription({
+    required String id,
+    required String name,
+    required String url,
+    required List<ImportedSubscriptionNode> nodes,
+  }) async => value;
+  @override
+  Future<ProfileLibrary> deleteSubscription(String id) async => value;
   @override
   Future<String> loadDefaultUdpTargets() async => '';
 }

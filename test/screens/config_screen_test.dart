@@ -124,6 +124,39 @@ void main() {
     expect(find.text('stun.sipnet.net:3478'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'subscription manager masks URL and managed nodes are read only',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = AppController(
+        bridge: TestBridge(),
+        store: MemoryConfigStore(_subscriptionLibrary),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ConfigScreen(controller: controller)),
+        ),
+      );
+
+      expect(find.text('Managed by subscription'), findsOneWidget);
+      expect(find.byTooltip('More node actions'), findsNothing);
+      expect(find.text('1 subscription'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('subscription-summary')));
+      await tester.pumpAndSettle();
+      expect(find.text('Main subscription'), findsOneWidget);
+      expect(find.textContaining('subscription.example.com'), findsOneWidget);
+      expect(find.textContaining('private-token'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 const _config = SsConfig(
@@ -145,4 +178,28 @@ final _library = ProfileLibrary(
   ],
   selectedProfileId: 'p1',
   stunServers: const [],
+);
+
+final _subscriptionLibrary = ProfileLibrary(
+  schemaVersion: 3,
+  profiles: const [
+    ServerProfile(
+      id: 'managed-p1',
+      name: 'Tokyo',
+      config: _config,
+      subscriptionId: 'sub-1',
+      subscriptionNodeKey: 'node-key',
+    ),
+  ],
+  selectedProfileId: 'managed-p1',
+  stunServers: const [],
+  subscriptions: const [
+    SubscriptionSource(
+      id: 'sub-1',
+      name: 'Main subscription',
+      url: 'https://subscription.example.com/path?token=private-token',
+      updatedAtMillis: 1700000000000,
+      nodeCount: 1,
+    ),
+  ],
 );
