@@ -11,6 +11,7 @@ abstract interface class ConfigStore {
   Future<ProfileLibrary> renameProfile(String id, String name);
   Future<ProfileLibrary> deleteProfile(String id);
   Future<ProfileLibrary> saveStunServers(List<StunServerEndpoint> servers);
+  Future<ProfileLibrary> saveThemeMode(AppThemePreference themeMode);
   Future<ProfileLibrary> syncSubscription({
     required String id,
     required String name,
@@ -54,6 +55,12 @@ class MethodChannelConfigStore implements ConfigStore {
   Future<ProfileLibrary> saveStunServers(List<StunServerEndpoint> servers) =>
       _libraryCall('saveStunServers', <String, Object?>{
         'servers': servers.map((server) => server.toJson()).toList(),
+      });
+
+  @override
+  Future<ProfileLibrary> saveThemeMode(AppThemePreference themeMode) =>
+      _libraryCall('saveThemeMode', <String, Object?>{
+        'themeMode': themeMode.wireValue,
       });
 
   @override

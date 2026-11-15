@@ -62,12 +62,30 @@ class ProfileRepositoryTest {
             if (index == 0) server.copy(enabled = false) else server
         }
         repository.saveStunServers(disabledStun)
+        repository.saveThemeMode(ProfileLibrary.THEME_DARK)
 
         val reloaded = repository(store).load()
 
         assertEquals(2, reloaded.profiles.size)
         assertEquals("Osaka", reloaded.selectedProfile.name)
         assertFalse(reloaded.stunServers.first().enabled)
+        assertEquals(ProfileLibrary.THEME_DARK, reloaded.themeMode)
+    }
+
+    @Test
+    fun olderLibrariesDefaultToSystemThemeAndRejectUnknownModes() {
+        val store = FakePreferenceStore().apply {
+            putString(
+                ProfileRepository.KEY_LIBRARY_JSON,
+                """{"schemaVersion":3,"selectedProfileId":"p1","profiles":[{"id":"p1","name":"Test","config":{}}],"stunServers":[],"subscriptions":[]}"""
+            )
+        }
+        val repository = repository(store)
+
+        assertEquals(ProfileLibrary.THEME_SYSTEM, repository.load().themeMode)
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.saveThemeMode("amoled")
+        }
     }
 
     @Test

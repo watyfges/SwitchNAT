@@ -78,6 +78,9 @@ class NativeBridge(
             "saveStunServers" -> mutateLibrary(result) {
                 repository.saveStunServers(stunServersFromCall(call))
             }
+            "saveThemeMode" -> mutateLibrary(result) {
+                repository.saveThemeMode(requiredString(call, "themeMode"))
+            }
             "syncSubscription" -> mutateLibrary(result) {
                 val args = stringMap(call.arguments)
                 repository.syncSubscription(

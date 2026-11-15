@@ -61,7 +61,8 @@ data class ProfileLibrary(
     val profiles: List<ServerProfile>,
     val selectedProfileId: String,
     val stunServers: List<StunServerEndpoint>,
-    val subscriptions: List<SubscriptionSource> = emptyList()
+    val subscriptions: List<SubscriptionSource> = emptyList(),
+    val themeMode: String = THEME_SYSTEM
 ) {
     val selectedProfile: ServerProfile get() = profiles.first { it.id == selectedProfileId }
 
@@ -70,11 +71,16 @@ data class ProfileLibrary(
         "profiles" to profiles.map(ServerProfile::toMap),
         "selectedProfileId" to selectedProfileId,
         "stunServers" to stunServers.map(StunServerEndpoint::toMap),
-        "subscriptions" to subscriptions.map(SubscriptionSource::toMap)
+        "subscriptions" to subscriptions.map(SubscriptionSource::toMap),
+        "themeMode" to themeMode
     )
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 3
+        const val CURRENT_SCHEMA_VERSION = 4
+        const val THEME_SYSTEM = "system"
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
+        val SUPPORTED_THEME_MODES = setOf(THEME_SYSTEM, THEME_LIGHT, THEME_DARK)
     }
 }
 

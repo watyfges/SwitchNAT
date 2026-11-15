@@ -30,7 +30,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Card(
-            color: on ? const Color(0xffe8f7ef) : null,
+            color: on ? Theme.of(context).colorScheme.primaryContainer : null,
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
@@ -103,7 +103,7 @@ class HomeScreen extends StatelessWidget {
           _MetricCard(
             key: const Key('nat-card'),
             label: context.tr('UDP NAT'),
-            value: _natLabel(context, status),
+            value: _natLabel(status),
             detail: status.natTest.mappedAddress,
             icon: Icons.public,
             onTap: on && status.natTest.state != DiagnosticRunState.testing
@@ -113,7 +113,7 @@ class HomeScreen extends StatelessWidget {
           if (controller.hasPendingProfileChange) ...<Widget>[
             const SizedBox(height: 12),
             Card(
-              color: const Color(0xfffff2d8),
+              color: Theme.of(context).colorScheme.tertiaryContainer,
               child: Padding(
                 padding: const EdgeInsets.all(14),
                 child: Text(
@@ -202,14 +202,13 @@ class HomeScreen extends StatelessWidget {
         SwitchPresence.inactive => context.tr('Inactive'),
       };
 
-  String _natLabel(BuildContext context, ServiceStatus status) =>
-      switch (status.natTest.state) {
-        DiagnosticRunState.testing => context.tr('Testing…'),
-        DiagnosticRunState.available => status.natTest.legacyLabel,
-        DiagnosticRunState.partial => context.tr('Partial result'),
-        DiagnosticRunState.unavailable => context.tr('Unavailable'),
-        DiagnosticRunState.idle => context.tr('Not tested'),
-      };
+  String _natLabel(ServiceStatus status) => switch (status.natTest.state) {
+    DiagnosticRunState.testing => 'Testing…',
+    DiagnosticRunState.available => status.natTest.legacyLabel,
+    DiagnosticRunState.partial => 'Partial result',
+    DiagnosticRunState.unavailable => 'Unavailable',
+    DiagnosticRunState.idle => 'Not tested',
+  };
 }
 
 class _MetricCard extends StatelessWidget {

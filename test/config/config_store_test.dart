@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:switchnat/src/config/config_store.dart';
+import 'package:switchnat/src/config/profile_library.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,13 +27,16 @@ void main() {
     const store = MethodChannelConfigStore();
     final loaded = await store.loadLibrary();
     await store.saveProfile(loaded.selectedProfile);
+    await store.saveThemeMode(AppThemePreference.dark);
 
     expect(loaded.selectedProfile.config.serverHost, '203.0.113.10');
     expect(calls.map((call) => call.method), <String>[
       'loadLibrary',
       'saveProfile',
+      'saveThemeMode',
     ]);
-    expect(calls.last.arguments, loaded.selectedProfile.toJson());
+    expect(calls[1].arguments, loaded.selectedProfile.toJson());
+    expect(calls.last.arguments, <String, Object?>{'themeMode': 'dark'});
   });
 }
 

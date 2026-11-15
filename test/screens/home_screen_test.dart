@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:switchnat/src/config/profile_library.dart';
 import 'package:switchnat/src/config/ss_config.dart';
@@ -134,6 +135,35 @@ void main() {
 
     expect(find.textContaining('Not configured'), findsOneWidget);
     expect(find.text(':8388'), findsNothing);
+  });
+
+  testWidgets('keeps UDP NAT result states in English in Chinese UI', (
+    tester,
+  ) async {
+    final bridge = TestBridge();
+    final controller = AppController(
+      bridge: bridge,
+      store: MemoryConfigStore(_library),
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        supportedLocales: const <Locale>[Locale('en'), Locale('zh')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        home: Scaffold(body: HomeScreen(controller: controller)),
+      ),
+    );
+    bridge.emitStatus(<Object?, Object?>{
+      'state': 'running',
+      'natTest': <Object?, Object?>{'state': 'partial'},
+    });
+    await tester.pump();
+
+    expect(find.text('Partial result'), findsOneWidget);
+    expect(find.text('部分结果'), findsNothing);
   });
 }
 

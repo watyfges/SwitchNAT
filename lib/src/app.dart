@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'config/config_store.dart';
+import 'config/profile_library.dart';
 import 'l10n/app_strings.dart';
 import 'native/native_bridge.dart';
 import 'screens/config_screen.dart';
@@ -47,94 +48,28 @@ class _SwitchNatAppState extends State<SwitchNatApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    const primary = Color(0xff087f5b);
-    final colorScheme =
-        ColorScheme.fromSeed(
-          seedColor: primary,
-          brightness: Brightness.light,
-          surface: Colors.white,
-        ).copyWith(
-          primary: primary,
-          secondary: const Color(0xff365f8d),
-          tertiary: const Color(0xffa9560b),
-          surface: Colors.white,
-        );
-
-    return MaterialApp(
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    builder: (context, _) => MaterialApp(
       title: 'SwitchNAT',
       debugShowCheckedModeBanner: false,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const <Locale>[Locale('en'), Locale('zh')],
-      theme: ThemeData(
-        colorScheme: colorScheme,
-        scaffoldBackgroundColor: Colors.white,
-        useMaterial3: true,
-        dividerColor: const Color(0xffe5e7eb),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Color(0xff17211d),
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 1,
-          centerTitle: false,
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: const Color(0xfff7f9f8),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xffcfd8d4)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xffcfd8d4)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: primary, width: 2),
-          ),
-        ),
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Colors.white,
-          indicatorColor: Color(0xffdff4ea),
-          elevation: 2,
-          height: 68,
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(112, 46),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(112, 46),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            minimumSize: const Size(104, 46),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(6),
-            ),
-          ),
-        ),
-      ),
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      themeMode: _themeMode(controller.library?.themeMode),
       home: Builder(
         builder: (context) => Scaffold(
           appBar: AppBar(
-            title: const Row(
+            title: Row(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Icon(Icons.swap_horiz_rounded, color: primary),
-                SizedBox(width: 8),
-                Text('SwitchNAT'),
+                Icon(
+                  Icons.swap_horiz_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                const Text('SwitchNAT'),
               ],
             ),
           ),
@@ -167,6 +102,81 @@ class _SwitchNatAppState extends State<SwitchNatApp> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
+
+ThemeMode _themeMode(AppThemePreference? preference) => switch (preference) {
+  AppThemePreference.light => ThemeMode.light,
+  AppThemePreference.dark => ThemeMode.dark,
+  _ => ThemeMode.system,
+};
+
+ThemeData _buildTheme(Brightness brightness) {
+  const seed = Color(0xff087f5b);
+  final colors = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+  final isDark = brightness == Brightness.dark;
+  final borderColor = colors.outlineVariant;
+
+  return ThemeData(
+    colorScheme: colors,
+    brightness: brightness,
+    useMaterial3: true,
+    scaffoldBackgroundColor: colors.surface,
+    dividerColor: colors.outlineVariant,
+    appBarTheme: AppBarTheme(
+      backgroundColor: colors.surface,
+      foregroundColor: colors.onSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 1,
+      centerTitle: false,
+    ),
+    cardTheme: CardThemeData(
+      color: colors.surfaceContainerLow,
+      surfaceTintColor: Colors.transparent,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: isDark
+          ? colors.surfaceContainerHighest
+          : colors.surfaceContainerLowest,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: colors.primary, width: 2),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: colors.surfaceContainer,
+      indicatorColor: colors.primaryContainer,
+      elevation: 2,
+      height: 68,
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(112, 46),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(112, 46),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(104, 46),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+    ),
+  );
 }

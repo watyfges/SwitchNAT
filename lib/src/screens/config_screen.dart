@@ -299,6 +299,34 @@ class _ConfigScreenState extends State<ConfigScreen> {
           ),
           const SizedBox(height: 8),
           Card(
+            child: ListTile(
+              leading: const Icon(Icons.contrast_outlined),
+              title: Text(context.tr('Appearance')),
+              subtitle: Text(context.tr('Theme')),
+              trailing: DropdownButton<AppThemePreference>(
+                key: const Key('theme-mode-selector'),
+                value: library.themeMode,
+                underline: const SizedBox.shrink(),
+                onChanged: widget.controller.busy
+                    ? null
+                    : (value) {
+                        if (value != null) {
+                          widget.controller.saveThemeMode(value);
+                        }
+                      },
+                items: AppThemePreference.values
+                    .map(
+                      (value) => DropdownMenuItem<AppThemePreference>(
+                        value: value,
+                        child: Text(_themeLabel(context, value)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
             child: Column(
               children: <Widget>[
                 ListTile(
@@ -392,6 +420,13 @@ class _ConfigScreenState extends State<ConfigScreen> {
 
   InputDecoration _fieldDecoration(String label, {String? helperText}) =>
       InputDecoration(labelText: label, helperText: helperText, isDense: true);
+
+  String _themeLabel(BuildContext context, AppThemePreference value) =>
+      switch (value) {
+        AppThemePreference.system => context.tr('Follow system'),
+        AppThemePreference.light => context.tr('Light'),
+        AppThemePreference.dark => context.tr('Dark'),
+      };
 
   Future<void> _pickProfile(ProfileLibrary library) async {
     final id = await showModalBottomSheet<String>(

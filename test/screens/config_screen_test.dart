@@ -58,11 +58,9 @@ void main() {
       scrollable: page,
     );
     expect(find.text('Advanced'), findsWidgets);
-    await tester.scrollUntilVisible(
-      find.text('UDP target rules').first,
-      300,
-      scrollable: page,
-    );
+    await tester.drag(page, const Offset(0, -240));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('UDP target rules').first);
     await tester.tap(find.text('UDP target rules'));
     await tester.pump();
     expect(find.text('203.0.113.10:8123'), findsOneWidget);
@@ -123,6 +121,40 @@ void main() {
 
     expect(find.text('stun.sipnet.net:3478'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('theme selector persists dark mode', (tester) async {
+    final store = MemoryConfigStore(_library);
+    final controller = AppController(bridge: TestBridge(), store: store);
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ConfigScreen(controller: controller)),
+      ),
+    );
+
+    final page = find.byType(Scrollable).first;
+    await tester.scrollUntilVisible(
+      find.text('Advanced').first,
+      300,
+      scrollable: page,
+    );
+    await tester.scrollUntilVisible(
+      find.text('Appearance'),
+      300,
+      scrollable: page,
+    );
+    expect(find.text('Follow system'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('theme-mode-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('theme-mode-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark').last);
+    await tester.pumpAndSettle();
+
+    expect(store.value.themeMode, AppThemePreference.dark);
+    expect(find.text('Dark'), findsOneWidget);
   });
 
   testWidgets(

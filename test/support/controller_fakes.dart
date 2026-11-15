@@ -51,6 +51,7 @@ class MemoryConfigStore implements ConfigStore {
       selectedProfileId: value.selectedProfileId,
       stunServers: value.stunServers,
       subscriptions: value.subscriptions,
+      themeMode: value.themeMode,
     );
     return value;
   }
@@ -63,6 +64,7 @@ class MemoryConfigStore implements ConfigStore {
       selectedProfileId: id,
       stunServers: value.stunServers,
       subscriptions: value.subscriptions,
+      themeMode: value.themeMode,
     );
     return value;
   }
@@ -87,6 +89,20 @@ class MemoryConfigStore implements ConfigStore {
       selectedProfileId: value.selectedProfileId,
       stunServers: servers,
       subscriptions: value.subscriptions,
+      themeMode: value.themeMode,
+    );
+    return value;
+  }
+
+  @override
+  Future<ProfileLibrary> saveThemeMode(AppThemePreference themeMode) async {
+    value = ProfileLibrary(
+      schemaVersion: value.schemaVersion,
+      profiles: value.profiles,
+      selectedProfileId: value.selectedProfileId,
+      stunServers: value.stunServers,
+      subscriptions: value.subscriptions,
+      themeMode: themeMode,
     );
     return value;
   }

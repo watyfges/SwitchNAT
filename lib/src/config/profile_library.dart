@@ -1,5 +1,19 @@
 import 'ss_config.dart';
 
+enum AppThemePreference {
+  system,
+  light,
+  dark;
+
+  static AppThemePreference fromWireValue(Object? value) => switch (value) {
+    'light' => AppThemePreference.light,
+    'dark' => AppThemePreference.dark,
+    _ => AppThemePreference.system,
+  };
+
+  String get wireValue => name;
+}
+
 class ServerProfile {
   const ServerProfile({
     required this.id,
@@ -129,6 +143,7 @@ class ProfileLibrary {
     required this.selectedProfileId,
     required this.stunServers,
     this.subscriptions = const <SubscriptionSource>[],
+    this.themeMode = AppThemePreference.system,
   });
 
   final int schemaVersion;
@@ -136,6 +151,7 @@ class ProfileLibrary {
   final String selectedProfileId;
   final List<StunServerEndpoint> stunServers;
   final List<SubscriptionSource> subscriptions;
+  final AppThemePreference themeMode;
 
   ServerProfile get selectedProfile =>
       profiles.firstWhere((profile) => profile.id == selectedProfileId);
@@ -152,6 +168,7 @@ class ProfileLibrary {
     subscriptions: _objectList(json['subscriptions'])
         .map((value) => SubscriptionSource.fromJson(_stringMap(value)))
         .toList(growable: false),
+    themeMode: AppThemePreference.fromWireValue(json['themeMode']),
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -160,6 +177,7 @@ class ProfileLibrary {
     'selectedProfileId': selectedProfileId,
     'stunServers': stunServers.map((server) => server.toJson()).toList(),
     'subscriptions': subscriptions.map((source) => source.toJson()).toList(),
+    'themeMode': themeMode.wireValue,
   };
 }
 

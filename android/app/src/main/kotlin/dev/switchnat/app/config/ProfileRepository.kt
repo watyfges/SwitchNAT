@@ -100,6 +100,13 @@ class ProfileRepository(
         return persist(load().copy(stunServers = servers))
     }
 
+    fun saveThemeMode(themeMode: String): ProfileLibrary {
+        require(themeMode in ProfileLibrary.SUPPORTED_THEME_MODES) {
+            "Unsupported theme mode: $themeMode"
+        }
+        return persist(load().copy(themeMode = themeMode))
+    }
+
     fun syncSubscription(
         requestedId: String,
         name: String,
@@ -247,6 +254,9 @@ class ProfileRepository(
         require(library.schemaVersion == ProfileLibrary.CURRENT_SCHEMA_VERSION) {
             "Unsupported profile schema: ${library.schemaVersion}"
         }
+        require(library.themeMode in ProfileLibrary.SUPPORTED_THEME_MODES) {
+            "Unsupported theme mode: ${library.themeMode}"
+        }
         require(library.profiles.isNotEmpty()) { "At least one profile is required" }
         require(library.profiles.map { it.id }.toSet().size == library.profiles.size) {
             "Duplicate profile id"
@@ -292,6 +302,7 @@ class ProfileRepository(
     private fun encode(library: ProfileLibrary): String = JSONObject().apply {
         put("schemaVersion", library.schemaVersion)
         put("selectedProfileId", library.selectedProfileId)
+        put("themeMode", library.themeMode)
         put("profiles", JSONArray().apply {
             library.profiles.forEach { put(JSONObject(it.toMap())) }
         })
@@ -375,7 +386,10 @@ class ProfileRepository(
             profiles = normalizedProfiles,
             selectedProfileId = selected,
             stunServers = stunServers,
-            subscriptions = subscriptions
+            subscriptions = subscriptions,
+            themeMode = root.optString("themeMode")
+                .takeIf { it in ProfileLibrary.SUPPORTED_THEME_MODES }
+                ?: ProfileLibrary.THEME_SYSTEM
         )
     }
 

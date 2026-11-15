@@ -75,6 +75,8 @@ class AppController extends ChangeNotifier {
       _mutate(() => store.deleteProfile(id));
   Future<void> saveStunServers(List<StunServerEndpoint> servers) =>
       _mutate(() => store.saveStunServers(servers));
+  Future<void> saveThemeMode(AppThemePreference themeMode) =>
+      _mutate(() => store.saveThemeMode(themeMode));
   Future<void> syncSubscription({
     required String id,
     required String name,

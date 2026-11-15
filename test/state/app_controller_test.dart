@@ -122,6 +122,7 @@ class FakeStore implements ConfigStore {
         selectedProfileId: id,
         stunServers: value.stunServers,
         subscriptions: value.subscriptions,
+        themeMode: value.themeMode,
       );
   @override
   Future<ProfileLibrary> saveProfile(ServerProfile profile) async => value;
@@ -135,6 +136,16 @@ class FakeStore implements ConfigStore {
   Future<ProfileLibrary> saveStunServers(
     List<StunServerEndpoint> servers,
   ) async => value;
+  @override
+  Future<ProfileLibrary> saveThemeMode(AppThemePreference themeMode) async =>
+      value = ProfileLibrary(
+        schemaVersion: value.schemaVersion,
+        profiles: value.profiles,
+        selectedProfileId: value.selectedProfileId,
+        stunServers: value.stunServers,
+        subscriptions: value.subscriptions,
+        themeMode: themeMode,
+      );
   @override
   Future<ProfileLibrary> syncSubscription({
     required String id,

@@ -4,7 +4,7 @@
 
 > 实验性、非官方、无 Root 的 Nintendo Switch Android 热点网络转发工具。
 
-SwitchNAT 是一款开源、可自建的 Nintendo Switch 游戏加速器，面向拥有 VPS、自建 Shadowsocks 或 VLESS + Reality 节点，或者希望研究自建游戏加速线路的用户。
+SwitchNAT 是一款开源、可自建的 Nintendo Switch 游戏加速器，支持自备 Shadowsocks 或 VLESS + Reality 节点，面向拥有 VPS 或希望研究自建游戏加速线路的用户。
 
 无需 Root，也不需要额外的软路由。只需让 Switch 连接 Android 手机热点，SwitchNAT 就能将 TCP 和 UDP 流量通过你自己的节点转发。
 
@@ -17,23 +17,23 @@ SwitchNAT 是一款开源、可自建的 Nintendo Switch 游戏加速器，面�
 SwitchNAT 将 TCP 和 UDP 分成两条路径：
 
 - TCP：Switch 手动配置手机热点网关上的 HTTP 代理，App 再通过所选节点协议转发。
-- UDP：Android VpnService 将预配置的目标地址投递给 App 绑定的本地 socket，App 使用 Shadowsocks UDP relay 或 VLESS UoT 转发 payload。
+- UDP：Android VpnService 将预配置的目标地址投递给 App 绑定的本地 socket，App 通过 Shadowsocks UDP relay，或内置 Xray Core 的 VLESS + Reality/XUDP 出站转发 payload。
 
-固定 UDP target 用于建立初始通信路径。当服务器返回未预配置的玩家 endpoint 时，App 会动态创建 Switch 可达的本地 UDP alias，并复用原有 Shadowsocks UDP session 继续双向通信。该机制适用于玩家加入、退出或重新匹配时远端地址变化的 P2P 场景。
+固定 UDP target 用于建立初始通信路径。当节点出口返回未预配置的玩家 endpoint 时，App 会动态创建 Switch 可达的本地 UDP alias，并复用当前 flow 的 UDP relay session 继续双向通信；该 session 可以是 Shadowsocks UDP，也可以是 Xray SOCKS UDP association 背后的 VLESS + Reality/XUDP 出站。该机制适用于玩家加入、退出或重新匹配时远端地址变化的 P2P 场景。
 
-本项目已经在特定设备和网络环境中完成技术验证，但不同 Android 厂商、系统版本、热点实现、运营商网络、Shadowsocks 服务端和游戏可能产生不同结果。
+本项目已经在特定设备和网络环境中完成技术验证，但不同 Android 厂商、系统版本、热点实现、运营商网络、节点服务端和游戏可能产生不同结果。
 
 ## 主要功能
 
 - 无 Root Android VpnService。
-- HTTP CONNECT 和 absolute-form HTTP 代理，经 Shadowsocks TCP 转发。
-- 固定 IPv4/CIDR UDP targets，经 Shadowsocks UDP relay 转发。
+- HTTP CONNECT 和 absolute-form HTTP 代理，经所选 Shadowsocks 或 VLESS + Reality 节点转发。
+- 固定 IPv4/CIDR UDP targets，经 Shadowsocks UDP 或 VLESS + Reality/XUDP 路径转发。
 - 动态 P2P endpoint alias 学习、复用、超时和容量回收。
-- 按 Switch 源 IP:port 复用 UDP relay session，减少目标变化导致的公网端口变化。
+- 按 Switch 源 IP:port 复用协议无关的 UDP relay session，减少目标变化导致的公网端口变化。
 - 多节点的创建、重命名、选择、保存和删除。
 - 支持添加、编辑、单独更新、全部更新和删除多个 Clash YAML 订阅；当前导入 Shadowsocks 与 VLESS + Reality 节点。
 - 支持 VLESS + Reality（RAW、Vision/无 flow），TCP 与 UDP 共用内置 Xray Core 出站。
-- 中英文界面，跟随 Android 系统语言自动切换。
+- 中英文界面；主题默认跟随系统，也可手动选择浅色或深色。
 - 支持 aes-128-gcm、aes-256-gcm 和 chacha20-ietf-poly1305。
 - 服务启动后自动执行 TCP 连通性和 STUN NAT 行为测试，也可手动重新测试。
 - 可自定义全局 STUN 服务器列表。
@@ -46,12 +46,12 @@ SwitchNAT 将 TCP 和 UDP 分成两条路径：
 ~~~text
 Nintendo Switch
   ├─ TCP → 手机热点 HTTP 代理 → SS TCP / VLESS Reality → 目标服务
-  └─ UDP → Android VpnService/local endpoint → SS UDP / VLESS UoT → 固定服务器或 P2P 玩家
+  └─ UDP → Android VpnService/local endpoint → SS UDP / VLESS Reality + XUDP → 固定服务器或 P2P 玩家
                                                         ↑
                                       动态玩家通过本地 UDP alias 回到同一 relay session
 ~~~
 
-STUN 页面显示的是 **当前节点出口** 的 UDP 映射和过滤行为，例如 Full Cone、Restricted Cone、Port-Restricted Cone 或 Symmetric。它不是 Nintendo Switch NAT 等级的直接检测结果，也不能单独保证某个游戏能够联机。
+STUN 页面显示的是 **当前节点出口** 的 UDP 映射和过滤行为，例如 Full Cone、Restricted Cone、Port-Restricted Cone 或 Symmetric。UDP NAT 结果固定显示英文原始标签，避免不同语言下出现协议名称歧义。它不是 Nintendo Switch NAT 等级的直接检测结果，也不能单独保证某个游戏能够联机。
 
 动态学习不能完全替代 bootstrap UDP targets：App 必须先通过固定 target 收到远端响应，才能从已有 relay session 中学习未知玩家 endpoint。
 
@@ -95,14 +95,14 @@ cd android
 ./gradlew :app:testDebugUnitTest
 ~~~
 
-CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建并推送例如 <code>v1.1.0</code> 的 tag 后，会把按 ABI 拆分的 release APK 自动附加到同名 GitHub Release。Xray AAR 不提交到仓库，而由脚本按固定版本和 SHA-256 校验下载。
+CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建并推送例如 <code>v1.3.0</code> 的 tag 后，会把按 ABI 拆分的 release APK 自动附加到同名 GitHub Release。Xray AAR 不提交到仓库，而由脚本按固定版本和 SHA-256 校验下载。
 
 ## 使用方法
 
 1. 在 Config 页面手动创建节点，或打开“订阅”管理添加 Clash YAML 订阅。订阅支持单独更新和全部更新，导入节点为只读。
 2. 选择一个 Shadowsocks 或 VLESS + Reality 节点；手动节点需要填写对应字段与 HTTP proxy port。
 3. 检查预置 UDP targets；它们负责 bootstrap 固定服务端流量，可按实际抓包结果修改。
-4. 按需编辑全局 STUN 服务器列表并保存节点。
+4. 按需编辑全局 STUN 服务器列表，并在“高级设置”中选择跟随系统、浅色或深色主题，然后保存节点。
 5. 打开手机热点，让 Switch 连接该热点。
 6. 在 Switch 网络设置中，把 HTTP 代理地址设为 App 显示的热点网关，端口设为节点配置的 proxy port。
 7. 回到首页启动 SwitchNAT，并授予 VPN 和通知权限。
@@ -120,7 +120,7 @@ CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建
 - 每个 Switch UDP flow 最多 128 个动态 alias，全局最多 512 个；默认空闲 5 分钟回收。
 - TCP 需要在 Switch 上手动配置 HTTP 代理，不是透明 TCP VPN。
 - 动态 alias 依赖已经建立的 UDP relay session，不能从完全未知且从未到达的流量中凭空发现玩家。
-- 当前 VLESS 支持范围是 RAW + Reality；UDP 使用每个 Switch flow 对应的 SOCKS UDP association/VLESS UoT，不强制开启 XUDP Mux。
+- 当前 VLESS 支持范围是 RAW + Reality；UDP 为每个 Switch flow 建立 SOCKS UDP association，并由 Xray 使用 VLESS XUDP packet encoding 出站，当前不启用 XUDP Mux。
 - 订阅解析当前面向 Clash YAML，仅导入受支持加密方式的 Shadowsocks 和 TCP/RAW VLESS + Reality；其他协议会跳过。
 - STUN 服务端必须支持测试所需属性；只返回基础 Binding 响应时可能显示 partial result。
 - Android 厂商可能限制热点流量进入 VPN、本地地址绑定、前台服务或 Live Updates。
@@ -152,7 +152,7 @@ CI 在每次推送和 Pull Request 时构建并上传 workflow artifact；创建
 
 SwitchNAT 是独立、非官方的技术探索项目，与 Nintendo、Shadowsocks 项目、Google、小米、vivo 或其他设备厂商不存在隶属、赞助、认可或背书关系。Nintendo Switch 及其他商标属于各自权利人。
 
-请遵守所在地法律、网络服务条款、游戏服务条款和 Shadowsocks 服务端提供方规则。软件按许可证中的无担保条款提供，不保证特定 NAT 等级、游戏兼容性、网络质量或持续可用性。
+请遵守所在地法律、网络服务条款、游戏服务条款和所使用节点服务提供方的规则。软件按许可证中的无担保条款提供，不保证特定 NAT 等级、游戏兼容性、网络质量或持续可用性。
 
 ## 许可证
 

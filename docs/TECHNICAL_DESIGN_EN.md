@@ -19,7 +19,7 @@ Current non-goals include:
 - Transparent TCP interception from TUN.
 - IPv6.
 - Automatic discovery of every game flow.
-- A bundled Shadowsocks server or public-node distribution.
+- A bundled node server or public-node distribution.
 - Guaranteed NAT A, matchmaking success, or vendor compatibility.
 
 ## 2. System Architecture
@@ -34,7 +34,7 @@ flowchart LR
     VPN["VpnService + fixed UDP endpoints"]
     ALIAS["Dynamic UDP aliases"]
     SSTCP["SS TCP / VLESS Reality"]
-    SSUDP["SS UDP / VLESS UoT session"]
+    SSUDP["SS UDP / VLESS Reality + XUDP session"]
     SERVER["Proxy server"]
     DEST["Nintendo services / P2P peers"]
 
@@ -66,12 +66,13 @@ Flutter uses two channels:
 - <code>dev.switchnat.app/control</code> requests VPN/notification permissions, loads or saves configuration, starts or stops the service, and runs diagnostics.
 - <code>dev.switchnat.app/status</code> continuously publishes <code>DiagnosticsSnapshot</code>.
 
-<code>ProfileRepository</code> stores a schema-version-3 profile library in app-private SharedPreferences and can read versions 1 and 2. The library contains:
+<code>ProfileRepository</code> stores a schema-version-4 profile library in app-private SharedPreferences and can read versions 1 through 3. The library contains:
 
 - One or more Shadowsocks/VLESS Reality profiles.
 - The selected profile ID.
 - A global shared STUN server list.
 - Multiple subscription sources and the source/stable-node-key relationship for imported profiles.
+- A global System, Light, or Dark theme preference; older schemas migrate to System.
 
 A profile contains the protocol, host, port, HTTP proxy port, UDP targets, and protocol-specific fields. Shadowsocks uses a password and AEAD method. VLESS Reality uses UUID, flow, SNI, Reality public key, short ID, fingerprint, and spider path. First launch creates a blank profile with bundled UDP targets and four default STUN endpoints. Legacy single-node settings are migrated into the profile library.
 
@@ -102,9 +103,9 @@ Stop, permission revocation, startup failure, and service destruction close the 
 - <code>CONNECT host:port HTTP/1.1</code>.
 - Absolute-form HTTP requests such as <code>GET http://example.test/path HTTP/1.1</code>.
 
-It resolves the real target, creates a <code>ShadowsocksTcpClient</code>, writes the Shadowsocks destination header, and copies bytes in both directions. The client-header limit is 16 KiB and the Shadowsocks TCP connect timeout is 10 seconds.
+It resolves the real target and selects the actual outbound through <code>TcpOutboundFactory</code>. Shadowsocks profiles use <code>ShadowsocksTcpClient</code> and a Shadowsocks destination header; VLESS + Reality profiles use <code>Socks5TcpClient</code> against the local Xray SOCKS5 inbound. The HTTP proxy then copies bytes in both directions. The client-header limit is 16 KiB and the outbound connect timeout is 10 seconds.
 
-Every Shadowsocks TCP socket calls <code>VpnService.protect()</code> before connecting so proxy traffic does not loop back into the VPN. Connection counts and failure categories are published through diagnostics.
+Direct node sockets call <code>VpnService.protect()</code> before connecting so proxy traffic does not loop back into the VPN. Xray exposes its SOCKS5 inbound only on loopback and owns the VLESS + Reality outbound. Connection counts and failure categories are published through diagnostics.
 
 ## 6. Fixed UDP Endpoint Relay
 
@@ -122,14 +123,14 @@ For each fixed endpoint:
 1. The VPN registers its IP as a /32 address and route.
 2. <code>DatagramLocalUdpSocketFactory</code> binds <code>targetIp:targetPort</code>.
 3. A Switch payload enters a flow keyed by the Switch source <code>IP:port</code>.
-4. The flow sends the payload to the real target in Shadowsocks UDP packet format.
+4. The flow sends the payload to the real target through the selected node's <code>UdpRelaySession</code>, implemented as either Shadowsocks UDP packets or an Xray SOCKS5 UDP association.
 5. If the response source matches a configured endpoint, the matching fixed socket writes it back to the Switch.
 
 Fixed targets are the bootstrap set. Removing all of them leaves the service without an address that can capture initial UDP traffic, so dynamic learning has no relay session to extend.
 
 ## 7. Dynamic P2P Aliases
 
-A decoded Shadowsocks UDP response includes its remote source endpoint. When that endpoint is not in the fixed target set, <code>UdpPeerAliasManager</code> uses this key:
+A response from <code>UdpRelaySession</code> includes its remote source endpoint. When that endpoint is not in the fixed target set, <code>UdpPeerAliasManager</code> uses this key:
 
 ~~~text
 (Switch flow IP:port, remote peer IP:port)
@@ -144,11 +145,11 @@ Creation flow:
 
 The same key reuses one alias. Closing a flow closes all aliases that belong to it. Default idle timeout is 300 seconds and the sweeper runs every 30 seconds. Limits are 128 aliases per flow and 512 globally; the oldest alias is evicted at capacity.
 
-## 8. Shadowsocks UDP Sessions and NAT Behavior
+## 8. UDP Relay Sessions, Node Protocols, and NAT Behavior
 
-<code>LocalUdpEndpointProxy.flows</code> is keyed only by the Switch sender <code>IP:port</code>; the destination endpoint is not part of the key. One Switch source port therefore reuses one <code>ShadowsocksUdpClient</code> and one local UDP socket across fixed servers and dynamic peers.
+<code>LocalUdpEndpointProxy.flows</code> is keyed only by the Switch sender <code>IP:port</code>; the destination endpoint is not part of the key. One Switch source port therefore reuses one <code>UdpRelaySession</code> and one local UDP socket across fixed servers and dynamic peers. A Shadowsocks profile creates <code>ShadowsocksUdpClient</code>; a VLESS + Reality profile creates <code>Socks5UdpClient</code> against the local Xray inbound.
 
-This reduces Shadowsocks-egress mapping changes when destinations change and more closely matches endpoint-independent mapping behavior. It is an important condition in the observed NAT improvement, but the final public mapping still belongs to the Shadowsocks server network. Session reuse alone does not guarantee Full Cone or Nintendo NAT A.
+This reduces node-egress mapping changes when destinations change and more closely matches endpoint-independent mapping behavior. It is an important condition in the observed NAT improvement, but the final public mapping still belongs to the node server network. Session reuse alone does not guarantee Full Cone or Nintendo NAT A.
 
 Both Shadowsocks UDP and TCP sockets call <code>VpnService.protect()</code>. Supported AEAD methods are:
 
@@ -156,7 +157,7 @@ Both Shadowsocks UDP and TCP sockets call <code>VpnService.protect()</code>. Sup
 - aes-256-gcm
 - chacha20-ietf-poly1305
 
-VLESS + Reality nodes use a pinned AndroidLibXrayLite/Xray Core outbound. <code>XrayCoreRuntime</code> starts a SOCKS5 inbound bound only to <code>127.0.0.1</code>. <code>Socks5TcpClient</code> uses CONNECT and <code>Socks5UdpClient</code> uses UDP ASSOCIATE. Reality uses RAW transport, SNI, fingerprint, short ID, and the current Xray <code>password</code> field (the Reality public key shown by the UI). UDP uses native VLESS UoT. Mux/XUDP is not forced because of compatibility risk around concurrent Vision XUDP sessions.
+VLESS + Reality nodes use a pinned AndroidLibXrayLite/Xray Core outbound. <code>XrayCoreRuntime</code> starts a SOCKS5 inbound bound only to <code>127.0.0.1</code>. <code>Socks5TcpClient</code> uses CONNECT and <code>Socks5UdpClient</code> uses UDP ASSOCIATE. Reality uses RAW transport, SNI, fingerprint, short ID, and the current Xray <code>password</code> field (the Reality public key shown by the UI). The VLESS outbound explicitly sets <code>packetEncoding=xudp</code>; each Switch flow still owns a separate SOCKS UDP association, and XUDP Mux is currently disabled.
 
 The Xray AAR is not committed to Git. <code>scripts/fetch_xray_core.sh</code> downloads a pinned official AndroidLibXrayLite release and verifies its SHA-256 checksum. Both local builds and GitHub Actions run it before Gradle compilation.
 
@@ -164,12 +165,12 @@ The Xray AAR is not committed to Git. <code>scripts/fetch_xray_core.sh</code> do
 
 After the service reaches running, <code>ConnectionDiagnosticsCoordinator</code> uses two workers to run the TCP and NAT probes in parallel. Tapping a Home status card cancels the previous probe of that type and starts a new generation, preventing a stale result from replacing a newer one.
 
-The STUN probe sends Binding requests through the current Shadowsocks UDP session to enabled global STUN endpoints. It attempts the modern format first, falls back to the legacy format when necessary, and, when the server supports OTHER-ADDRESS/CHANGE-REQUEST behavior, compares:
+The STUN probe sends Binding requests through the selected node's <code>UdpRelaySession</code> to enabled global STUN endpoints, so both Shadowsocks and VLESS + Reality test their actual egress. It attempts the modern format first, falls back to the legacy format when necessary, and, when the server supports OTHER-ADDRESS/CHANGE-REQUEST behavior, compares:
 
 - Whether the mapping changes with the STUN destination.
 - Whether filtering accepts changed IP/port or changed-port responses.
 
-The UI exposes Full Cone, Restricted Cone, Port-Restricted Cone, and Symmetric labels together with mapped address, mapping behavior, filtering behavior, RTT, and the STUN server that responded.
+The UI always exposes the original English Full Cone, Restricted Cone, Port-Restricted Cone, and Symmetric labels, together with mapped address, mapping behavior, filtering behavior, RTT, and the STUN server that responded.
 
 A basic Binding response without enough attributes for behavior classification produces a partial result. No response from all servers produces unavailable.
 
@@ -207,14 +208,14 @@ Errors are categorized at boundaries, including BAD_CONFIG, VPN_START, LOCAL_UDP
 The network layer uses bounded responsibilities across threads and concurrent containers:
 
 - One local receive thread per fixed UDP endpoint.
-- One Shadowsocks receive thread per Switch UDP flow.
+- One relay-session receive thread per Switch UDP flow.
 - One Switch-reply receive thread per dynamic alias.
 - One alias sweeper thread.
 - An HTTP accept thread and relay workers per TCP connection.
 - Two diagnostic workers.
 - One daemon thread for per-second notification updates.
 
-The flow map is a ConcurrentHashMap. The alias map is accessed under a lock. Sends on one flow are serialized so one Shadowsocks UDP session is not written concurrently. Close operations are guarded for idempotence and avoid interrupting the current thread as if it were a peer worker.
+The flow map is a ConcurrentHashMap. The alias map is accessed under a lock. Sends on one flow are serialized so one UDP relay session is not written concurrently. Close operations are guarded for idempotence and avoid interrupting the current thread as if it were a peer worker.
 
 ## 13. Security and Privacy Boundaries
 
@@ -223,14 +224,14 @@ The flow map is a ConcurrentHashMap. The alias map is accessed under a lock. Sen
 - Profiles and subscription URLs are stored in MODE_PRIVATE SharedPreferences without additional hardware-backed encryption; subscription lists render only the URL host.
 - The Android application sets <code>allowBackup=false</code>.
 - Packet samples omit payloads, but endpoint and IP metadata may still be sensitive.
-- The project contains no user Shadowsocks server, password, signing material, or telemetry upload.
+- The project contains no user node, credential, signing material, or telemetry upload.
 - Logs, issues, and captures still require manual redaction before publication.
 
 ## 14. Test Strategy
 
 Flutter tests cover configuration models, profile library, platform bridge, controller, status parsing, and all four screens. Android JVM tests cover:
 
-- Shadowsocks addresses, AEAD TCP/UDP codecs, and clients.
+- Shadowsocks addresses, AEAD TCP/UDP codecs and clients, plus the VLESS/Xray adapter.
 - HTTP proxy parsing and relay.
 - UDP endpoint flows and peer-alias lifecycle.
 - Configuration persistence and host resolution.

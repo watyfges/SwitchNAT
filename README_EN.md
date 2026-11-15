@@ -11,23 +11,23 @@ SwitchNAT relays TCP and UDP traffic from a Nintendo Switch connected to an Andr
 SwitchNAT uses separate paths for TCP and UDP:
 
 - TCP: the Switch uses an HTTP proxy on the phone's hotspot gateway, and the app relays the connection through the selected node protocol.
-- UDP: Android VpnService delivers configured destination addresses to local sockets bound by the app, which relays each payload through Shadowsocks UDP or VLESS UoT.
+- UDP: Android VpnService delivers configured destination addresses to local sockets bound by the app, which relays each payload through Shadowsocks UDP or the embedded Xray Core's VLESS + Reality/XUDP outbound.
 
-Fixed UDP targets bootstrap the initial traffic path. When a response comes from an unconfigured player endpoint, the app creates a local UDP alias reachable by the Switch and reuses the existing Shadowsocks UDP session for two-way traffic. This supports P2P scenarios in which endpoints change as players join, leave, or match again.
+Fixed UDP targets bootstrap the initial traffic path. When the node egress returns a response from an unconfigured player endpoint, the app creates a local UDP alias reachable by the Switch and reuses the current flow's UDP relay session for two-way traffic. That session may be direct Shadowsocks UDP or a VLESS + Reality/XUDP outbound behind an Xray SOCKS UDP association. This supports P2P scenarios in which endpoints change as players join, leave, or match again.
 
-The project has been technically validated on specific devices and networks. Results can differ across Android vendors, OS versions, hotspot implementations, carriers, Shadowsocks servers, and games.
+The project has been technically validated on specific devices and networks. Results can differ across Android vendors, OS versions, hotspot implementations, carriers, node servers, and games.
 
 ## Features
 
 - Rootless Android VpnService.
-- HTTP CONNECT and absolute-form HTTP proxying over Shadowsocks TCP.
-- Fixed IPv4/CIDR UDP targets over Shadowsocks UDP relay.
+- HTTP CONNECT and absolute-form HTTP proxying through the selected Shadowsocks or VLESS + Reality node.
+- Fixed IPv4/CIDR UDP targets over Shadowsocks UDP or VLESS + Reality/XUDP.
 - Dynamic P2P endpoint alias learning, reuse, timeout, and capacity eviction.
-- UDP relay-session reuse keyed by the Switch source IP:port, reducing public-port changes when destinations change.
+- Protocol-independent UDP relay-session reuse keyed by the Switch source IP:port, reducing public-port changes when destinations change.
 - Multiple node profiles with create, rename, select, save, and delete operations.
 - Multiple Clash YAML subscriptions with add, edit, per-source refresh, refresh-all, and delete operations; supported Shadowsocks and VLESS + Reality nodes are imported.
 - VLESS + Reality support (RAW with Vision or no flow) using an embedded Xray Core for both TCP and UDP.
-- English and Simplified Chinese UI that follows the Android system locale.
+- English and Simplified Chinese UI, with System, Light, and Dark theme modes.
 - aes-128-gcm, aes-256-gcm, and chacha20-ietf-poly1305.
 - Automatic TCP connectivity and STUN NAT behavior tests after service startup, with manual retesting.
 - A global, customizable STUN server list.
@@ -40,13 +40,13 @@ The project has been technically validated on specific devices and networks. Res
 ~~~text
 Nintendo Switch
   ├─ TCP → hotspot HTTP proxy → SS TCP / VLESS Reality → destination
-  └─ UDP → Android VpnService/local endpoint → SS UDP / VLESS UoT → fixed server or P2P peer
+  └─ UDP → Android VpnService/local endpoint → SS UDP / VLESS Reality + XUDP → fixed server or P2P peer
                                                         ↑
                                   dynamic peers return through a local UDP alias
                                   backed by the same relay session
 ~~~
 
-The STUN result describes UDP mapping and filtering behavior at the **selected node egress**, such as Full Cone, Restricted Cone, Port-Restricted Cone, or Symmetric. It is not a direct measurement of the Nintendo Switch NAT grade and cannot by itself guarantee that a game will connect.
+The STUN result describes UDP mapping and filtering behavior at the **selected node egress**, such as Full Cone, Restricted Cone, Port-Restricted Cone, or Symmetric. UDP NAT results always use their original English labels to avoid protocol-name ambiguity across locales. This is not a direct measurement of the Nintendo Switch NAT grade and cannot by itself guarantee that a game will connect.
 
 Dynamic learning does not completely replace bootstrap UDP targets. The app must first receive a response through a fixed target and an existing relay session before it can learn an unknown player endpoint.
 
@@ -90,14 +90,14 @@ cd android
 ./gradlew :app:testDebugUnitTest
 ~~~
 
-CI builds and uploads a workflow artifact for pushes and pull requests. Pushing a tag such as <code>v1.1.0</code> automatically attaches ABI-split release APKs to the matching GitHub Release. The Xray AAR is not committed; the build script downloads a pinned version and verifies its SHA-256 checksum.
+CI builds and uploads a workflow artifact for pushes and pull requests. Pushing a tag such as <code>v1.3.0</code> automatically attaches ABI-split release APKs to the matching GitHub Release. The Xray AAR is not committed; the build script downloads a pinned version and verifies its SHA-256 checksum.
 
 ## Usage
 
 1. On Config, create a node manually or open Subscriptions to add a Clash YAML source. Subscriptions support individual and refresh-all updates; imported nodes are read-only.
 2. Select a Shadowsocks or VLESS + Reality node. Manual nodes require their protocol fields and HTTP proxy port.
 3. Review the bundled UDP targets. They bootstrap fixed service traffic and can be adjusted from packet-capture evidence.
-4. Edit the global STUN server list if necessary, then save the profile.
+4. Edit the global STUN server list if necessary, choose System, Light, or Dark under Advanced settings, then save the profile.
 5. Enable the phone hotspot and connect the Switch.
 6. In the Switch network settings, set the HTTP proxy host to the hotspot gateway shown by the app and use the profile's proxy port.
 7. Start SwitchNAT from the Home page and grant VPN and notification permissions.
@@ -115,7 +115,7 @@ Selecting another profile while the service is running does not silently replace
 - Each Switch UDP flow supports up to 128 dynamic aliases and the proxy supports 512 globally; the default idle timeout is five minutes.
 - TCP requires a manually configured HTTP proxy on the Switch and is not transparent TCP interception.
 - Dynamic aliases require an existing UDP relay session and cannot discover traffic that has never reached the app.
-- Current VLESS support is RAW + Reality. UDP uses one SOCKS UDP association/VLESS UoT path per Switch flow and does not force XUDP Mux.
+- Current VLESS support is RAW + Reality. UDP creates one SOCKS UDP association per Switch flow and Xray sends it with VLESS XUDP packet encoding; XUDP Mux is currently disabled.
 - Subscription parsing currently targets Clash YAML and imports only supported Shadowsocks ciphers and TCP/RAW VLESS + Reality nodes; other protocols are skipped.
 - STUN servers must support the attributes needed by the behavior test; a basic Binding-only response can produce a partial result.
 - Android vendors may restrict hotspot-to-VPN routing, local address binding, foreground services, or Live Updates.
@@ -147,7 +147,7 @@ This branch is a historical snapshot, not the currently recommended version.
 
 SwitchNAT is an independent, unofficial technical exploration project. It is not affiliated with, sponsored by, approved by, or endorsed by Nintendo, the Shadowsocks project, Google, Xiaomi, vivo, or any other device vendor. Nintendo Switch and other trademarks belong to their respective owners.
 
-Users are responsible for complying with applicable laws, network-provider terms, game-service terms, and their Shadowsocks provider's rules. The software is provided without warranty as described by the license. No particular NAT grade, game compatibility, network quality, or continued availability is guaranteed.
+Users are responsible for complying with applicable laws, network-provider terms, game-service terms, and the rules of their node provider. The software is provided without warranty as described by the license. No particular NAT grade, game compatibility, network quality, or continued availability is guaranteed.
 
 ## License
 

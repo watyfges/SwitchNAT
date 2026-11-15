@@ -5,6 +5,7 @@ void main() {
   test('profile library round trips selected profile and global stun list', () {
     final library = ProfileLibrary.fromJson(<String, Object?>{
       'schemaVersion': 1,
+      'themeMode': 'dark',
       'selectedProfileId': 'p1',
       'profiles': <Object?>[
         <String, Object?>{
@@ -45,6 +46,32 @@ void main() {
     expect(library.stunServers.single.enabled, isTrue);
     expect(library.selectedProfile.isSubscriptionManaged, isTrue);
     expect(library.subscriptions.single.nodeCount, 1);
+    expect(library.themeMode, AppThemePreference.dark);
+    expect(library.toJson()['themeMode'], 'dark');
     expect(library.toJson()['selectedProfileId'], 'p1');
   });
+
+  test('missing or unsupported theme preferences fall back to system', () {
+    final missing = ProfileLibrary.fromJson(_minimalLibrary);
+    final unsupported = ProfileLibrary.fromJson(<String, Object?>{
+      ..._minimalLibrary,
+      'themeMode': 'amoled',
+    });
+
+    expect(missing.themeMode, AppThemePreference.system);
+    expect(unsupported.themeMode, AppThemePreference.system);
+  });
 }
+
+const _minimalLibrary = <String, Object?>{
+  'schemaVersion': 1,
+  'selectedProfileId': 'p1',
+  'profiles': <Object?>[
+    <String, Object?>{
+      'id': 'p1',
+      'name': 'Test',
+      'config': <String, Object?>{},
+    },
+  ],
+  'stunServers': <Object?>[],
+};

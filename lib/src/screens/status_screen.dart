@@ -117,8 +117,8 @@ class _StateBanner extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final (background, foreground, icon) = switch (state) {
       VpnRunState.running => (
-        const Color(0xffdff4ea),
-        const Color(0xff075c42),
+        colors.primaryContainer,
+        colors.onPrimaryContainer,
         Icons.shield_outlined,
       ),
       VpnRunState.failed => (
@@ -127,13 +127,13 @@ class _StateBanner extends StatelessWidget {
         Icons.error_outline,
       ),
       VpnRunState.permissionNeeded => (
-        const Color(0xfffff1d6),
-        const Color(0xff764b00),
+        colors.tertiaryContainer,
+        colors.onTertiaryContainer,
         Icons.admin_panel_settings_outlined,
       ),
       VpnRunState.starting || VpnRunState.stopping => (
-        const Color(0xffe8eef7),
-        const Color(0xff334155),
+        colors.secondaryContainer,
+        colors.onSecondaryContainer,
         Icons.sync,
       ),
       VpnRunState.stopped => (
