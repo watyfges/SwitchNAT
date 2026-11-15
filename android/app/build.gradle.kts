@@ -22,10 +22,30 @@ android {
         versionName = flutter.versionName
     }
 
+    val releaseSigningConfig = System.getenv("ANDROID_KEYSTORE_FILE")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { keystorePath ->
+            val keystoreFile = file(keystorePath)
+            check(keystoreFile.isFile) {
+                "Release keystore does not exist: $keystorePath"
+            }
+            signingConfigs.create("release") {
+                storeFile = keystoreFile
+                storePassword = requireNotNull(System.getenv("ANDROID_KEYSTORE_PASSWORD")) {
+                    "ANDROID_KEYSTORE_PASSWORD is required for release signing"
+                }
+                keyAlias = requireNotNull(System.getenv("ANDROID_KEY_ALIAS")) {
+                    "ANDROID_KEY_ALIAS is required for release signing"
+                }
+                keyPassword = requireNotNull(System.getenv("ANDROID_KEY_PASSWORD")) {
+                    "ANDROID_KEY_PASSWORD is required for release signing"
+                }
+            }
+        }
+
     buildTypes {
         release {
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = releaseSigningConfig ?: signingConfigs.getByName("debug")
         }
     }
 }
