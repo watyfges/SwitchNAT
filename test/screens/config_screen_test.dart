@@ -165,10 +165,8 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      final controller = AppController(
-        bridge: TestBridge(),
-        store: MemoryConfigStore(_subscriptionLibrary),
-      );
+      final store = MemoryConfigStore(_subscriptionLibrary);
+      final controller = AppController(bridge: TestBridge(), store: store);
       addTearDown(controller.dispose);
       await controller.initialize();
       await tester.pumpWidget(
@@ -186,6 +184,24 @@ void main() {
       expect(find.text('Main subscription'), findsOneWidget);
       expect(find.textContaining('subscription.example.com'), findsOneWidget);
       expect(find.textContaining('private-token'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('subscription-updated-sub-1')),
+        findsOneWidget,
+      );
+      final updated = tester.widget<Text>(
+        find.byKey(const ValueKey<String>('subscription-updated-sub-1')),
+      );
+      expect(updated.data, contains('Last updated:'));
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('subscription-enabled-sub-1')),
+      );
+      await tester.pumpAndSettle();
+      expect(store.value.subscriptions.single.enabled, isFalse);
+      expect(store.value.enabledProfiles.map((profile) => profile.id), <String>[
+        'manual-p1',
+      ]);
+      expect(store.value.selectedProfileId, 'manual-p1');
       expect(tester.takeException(), isNull);
     },
   );
@@ -215,6 +231,7 @@ final _library = ProfileLibrary(
 final _subscriptionLibrary = ProfileLibrary(
   schemaVersion: 3,
   profiles: const [
+    ServerProfile(id: 'manual-p1', name: 'Manual', config: _config),
     ServerProfile(
       id: 'managed-p1',
       name: 'Tokyo',
@@ -229,7 +246,8 @@ final _subscriptionLibrary = ProfileLibrary(
     SubscriptionSource(
       id: 'sub-1',
       name: 'Main subscription',
-      url: 'https://subscription.example.com/path?token=private-token',
+      url:
+          'https://this-is-a-very-long-subscription-host-name.subscription.example.com/path?token=private-token',
       updatedAtMillis: 1700000000000,
       nodeCount: 1,
     ),

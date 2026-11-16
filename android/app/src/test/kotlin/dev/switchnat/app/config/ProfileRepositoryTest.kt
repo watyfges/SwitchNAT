@@ -165,6 +165,54 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun subscriptionToggleHidesNodesPersistsAndPreservesStateOnRefresh() {
+        val store = FakePreferenceStore()
+        val repository = repository(store)
+        val manualId = repository.load().selectedProfileId
+        val imported = repository.syncSubscription(
+            requestedId = "",
+            name = "Main subscription",
+            url = "https://example.com/subscription",
+            nodes = listOf(subscriptionNode("a", "Tokyo", "203.0.113.10"))
+        )
+        val source = imported.subscriptions.single()
+        val managedId = imported.selectedProfileId
+
+        val disabled = repository.setSubscriptionEnabled(source.id, false)
+
+        assertFalse(disabled.subscriptions.single().enabled)
+        assertEquals(manualId, disabled.selectedProfileId)
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.selectProfile(managedId)
+        }
+        val refreshed = repository.syncSubscription(
+            requestedId = source.id,
+            name = source.name,
+            url = source.url,
+            nodes = listOf(subscriptionNode("a", "Tokyo", "203.0.113.20"))
+        )
+        assertFalse(refreshed.subscriptions.single().enabled)
+        assertFalse(repository(store).load().subscriptions.single().enabled)
+    }
+
+    @Test
+    fun lastAvailableSubscriptionCannotBeDisabled() {
+        val repository = repository(FakePreferenceStore())
+        val manualId = repository.load().selectedProfileId
+        val imported = repository.syncSubscription(
+            requestedId = "",
+            name = "Only subscription",
+            url = "https://example.com/subscription",
+            nodes = listOf(subscriptionNode("a", "Tokyo", "203.0.113.10"))
+        )
+        repository.deleteProfile(manualId)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            repository.setSubscriptionEnabled(imported.subscriptions.single().id, false)
+        }
+    }
+
+    @Test
     fun deletingSubscriptionRemovesManagedNodesButKeepsManualProfile() {
         val repository = repository(FakePreferenceStore())
         val initial = repository.load()

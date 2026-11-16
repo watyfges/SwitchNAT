@@ -116,6 +116,39 @@ class MemoryConfigStore implements ConfigStore {
   }) async => value;
 
   @override
+  Future<ProfileLibrary> setSubscriptionEnabled(String id, bool enabled) async {
+    final subscriptions = value.subscriptions
+        .map(
+          (source) =>
+              source.id == id ? source.copyWith(enabled: enabled) : source,
+        )
+        .toList();
+    final enabledIds = subscriptions
+        .where((source) => source.enabled)
+        .map((source) => source.id)
+        .toSet();
+    final available = value.profiles
+        .where(
+          (profile) =>
+              !profile.isSubscriptionManaged ||
+              enabledIds.contains(profile.subscriptionId),
+        )
+        .toList();
+    value = ProfileLibrary(
+      schemaVersion: value.schemaVersion,
+      profiles: value.profiles,
+      selectedProfileId:
+          available.any((profile) => profile.id == value.selectedProfileId)
+          ? value.selectedProfileId
+          : available.first.id,
+      stunServers: value.stunServers,
+      subscriptions: subscriptions,
+      themeMode: value.themeMode,
+    );
+    return value;
+  }
+
+  @override
   Future<ProfileLibrary> deleteSubscription(String id) async => value;
 
   @override

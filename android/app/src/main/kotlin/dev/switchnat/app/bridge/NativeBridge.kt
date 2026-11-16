@@ -90,6 +90,14 @@ class NativeBridge(
                     nodes = subscriptionNodesFromCall(call)
                 )
             }
+            "setSubscriptionEnabled" -> mutateLibrary(result) {
+                val args = stringMap(call.arguments)
+                repository.setSubscriptionEnabled(
+                    id = (args["id"] as? String).orEmpty(),
+                    enabled = args["enabled"] as? Boolean ?: true,
+                    activeProfileId = diagnostics.snapshot().activeProfileId
+                )
+            }
             "deleteSubscription" -> mutateLibrary(result) {
                 repository.deleteSubscription(
                     requiredString(call, "id"),

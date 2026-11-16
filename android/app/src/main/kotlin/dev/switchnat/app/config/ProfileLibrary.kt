@@ -23,14 +23,16 @@ data class SubscriptionSource(
     val name: String,
     val url: String,
     val updatedAtMillis: Long,
-    val nodeCount: Int
+    val nodeCount: Int,
+    val enabled: Boolean = true
 ) {
     fun toMap(): Map<String, Any> = mapOf(
         "id" to id,
         "name" to name,
         "url" to url,
         "updatedAtMillis" to updatedAtMillis,
-        "nodeCount" to nodeCount
+        "nodeCount" to nodeCount,
+        "enabled" to enabled
     )
 }
 
@@ -76,7 +78,7 @@ data class ProfileLibrary(
     )
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 4
+        const val CURRENT_SCHEMA_VERSION = 5
         const val THEME_SYSTEM = "system"
         const val THEME_LIGHT = "light"
         const val THEME_DARK = "dark"

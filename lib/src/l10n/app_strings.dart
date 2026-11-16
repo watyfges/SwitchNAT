@@ -62,6 +62,7 @@ const Map<String, String> _zh = <String, String>{
   'Manage': '管理',
   'Manage subscriptions': '管理订阅',
   'Add subscription': '添加订阅',
+  'Enable subscription': '启用订阅',
   'Edit subscription': '编辑订阅',
   'Subscription name': '订阅名称',
   'Subscription URL': '订阅地址',

@@ -133,7 +133,8 @@ class HomeScreen extends StatelessWidget {
   );
 
   Future<void> _pickProfile(BuildContext context) async {
-    final items = controller.library?.profiles ?? const [];
+    final items =
+        controller.library?.enabledProfiles ?? const <ServerProfile>[];
     final id = await showModalBottomSheet<String>(
       context: context,
       builder: (context) => SafeArea(

@@ -18,6 +18,7 @@ abstract interface class ConfigStore {
     required String url,
     required List<ImportedSubscriptionNode> nodes,
   });
+  Future<ProfileLibrary> setSubscriptionEnabled(String id, bool enabled);
   Future<ProfileLibrary> deleteSubscription(String id);
   Future<String> loadDefaultUdpTargets();
 }
@@ -75,6 +76,13 @@ class MethodChannelConfigStore implements ConfigStore {
     'url': url,
     'nodes': nodes.map((node) => node.toJson()).toList(),
   });
+
+  @override
+  Future<ProfileLibrary> setSubscriptionEnabled(String id, bool enabled) =>
+      _libraryCall('setSubscriptionEnabled', <String, Object?>{
+        'id': id,
+        'enabled': enabled,
+      });
 
   @override
   Future<ProfileLibrary> deleteSubscription(String id) =>

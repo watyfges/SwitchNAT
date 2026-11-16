@@ -97,7 +97,9 @@ class AppController extends ChangeNotifier {
   Future<void> refreshAllSubscriptions() => _perform(() async {
     feedback = '';
     final sources = List<SubscriptionSource>.from(
-      library?.subscriptions ?? const <SubscriptionSource>[],
+      (library?.subscriptions ?? const <SubscriptionSource>[]).where(
+        (source) => source.enabled,
+      ),
     );
     var imported = 0;
     for (final source in sources) {
@@ -112,6 +114,8 @@ class AppController extends ChangeNotifier {
     }
     feedback = 'Updated ${sources.length} subscriptions, $imported nodes';
   });
+  Future<void> setSubscriptionEnabled(String id, bool enabled) =>
+      _mutate(() => store.setSubscriptionEnabled(id, enabled));
   Future<void> deleteSubscription(String id) => _perform(() async {
     feedback = '';
     library = await store.deleteSubscription(id);

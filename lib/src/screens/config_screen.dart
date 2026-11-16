@@ -446,7 +446,7 @@ class _ConfigScreenState extends State<ConfigScreen> {
             Flexible(
               child: ListView(
                 shrinkWrap: true,
-                children: library.profiles
+                children: library.enabledProfiles
                     .map(
                       (profile) => ListTile(
                         key: ValueKey<String>('profile-option-${profile.id}'),
@@ -784,41 +784,105 @@ class _SubscriptionManager extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final source = sources[index];
                     return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.cloud_done_outlined),
-                        title: Text(
-                          source.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          '${context.strings.nodes(source.nodeCount)} · '
-                          '${_subscriptionHost(source.url)}\n'
-                          '${context.tr('Last updated')}: '
-                          '${_formatUpdated(source.updatedAtMillis)}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        isThreeLine: true,
-                        trailing: PopupMenuButton<_SubscriptionAction>(
-                          enabled: !controller.busy,
-                          onSelected: (action) =>
-                              _runAction(context, action, source),
-                          itemBuilder: (_) =>
-                              <PopupMenuEntry<_SubscriptionAction>>[
-                                PopupMenuItem<_SubscriptionAction>(
-                                  value: _SubscriptionAction.update,
-                                  child: Text(context.tr('Update')),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 4, 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            Row(
+                              children: <Widget>[
+                                Icon(
+                                  source.enabled
+                                      ? Icons.cloud_done_outlined
+                                      : Icons.cloud_off_outlined,
                                 ),
-                                PopupMenuItem<_SubscriptionAction>(
-                                  value: _SubscriptionAction.edit,
-                                  child: Text(context.tr('Edit')),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    source.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
+                                  ),
                                 ),
-                                PopupMenuItem<_SubscriptionAction>(
-                                  value: _SubscriptionAction.delete,
-                                  child: Text(context.tr('Delete')),
+                                Semantics(
+                                  label: context.tr('Enable subscription'),
+                                  child: Switch(
+                                    key: ValueKey<String>(
+                                      'subscription-enabled-${source.id}',
+                                    ),
+                                    value: source.enabled,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: controller.busy
+                                        ? null
+                                        : (enabled) =>
+                                              controller.setSubscriptionEnabled(
+                                                source.id,
+                                                enabled,
+                                              ),
+                                  ),
+                                ),
+                                PopupMenuButton<_SubscriptionAction>(
+                                  enabled: !controller.busy,
+                                  onSelected: (action) =>
+                                      _runAction(context, action, source),
+                                  itemBuilder: (_) =>
+                                      <PopupMenuEntry<_SubscriptionAction>>[
+                                        PopupMenuItem<_SubscriptionAction>(
+                                          value: _SubscriptionAction.update,
+                                          child: Text(context.tr('Update')),
+                                        ),
+                                        PopupMenuItem<_SubscriptionAction>(
+                                          value: _SubscriptionAction.edit,
+                                          child: Text(context.tr('Edit')),
+                                        ),
+                                        PopupMenuItem<_SubscriptionAction>(
+                                          value: _SubscriptionAction.delete,
+                                          child: Text(context.tr('Delete')),
+                                        ),
+                                      ],
                                 ),
                               ],
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                left: 36,
+                                right: 8,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Row(
+                                    children: <Widget>[
+                                      Text(
+                                        '${context.strings.nodes(source.nodeCount)} · ',
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          _subscriptionHost(source.url),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${context.tr('Last updated')}: '
+                                    '${_formatUpdated(source.updatedAtMillis)}',
+                                    key: ValueKey<String>(
+                                      'subscription-updated-${source.id}',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     );

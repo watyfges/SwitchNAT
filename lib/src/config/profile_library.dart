@@ -69,6 +69,7 @@ class SubscriptionSource {
     required this.url,
     required this.updatedAtMillis,
     required this.nodeCount,
+    this.enabled = true,
   });
 
   final String id;
@@ -76,6 +77,7 @@ class SubscriptionSource {
   final String url;
   final int updatedAtMillis;
   final int nodeCount;
+  final bool enabled;
 
   factory SubscriptionSource.fromJson(Map<String, Object?> json) =>
       SubscriptionSource(
@@ -84,6 +86,7 @@ class SubscriptionSource {
         url: json['url'] as String? ?? '',
         updatedAtMillis: json['updatedAtMillis'] as int? ?? 0,
         nodeCount: json['nodeCount'] as int? ?? 0,
+        enabled: json['enabled'] as bool? ?? true,
       );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -92,7 +95,24 @@ class SubscriptionSource {
     'url': url,
     'updatedAtMillis': updatedAtMillis,
     'nodeCount': nodeCount,
+    'enabled': enabled,
   };
+
+  SubscriptionSource copyWith({
+    String? id,
+    String? name,
+    String? url,
+    int? updatedAtMillis,
+    int? nodeCount,
+    bool? enabled,
+  }) => SubscriptionSource(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    url: url ?? this.url,
+    updatedAtMillis: updatedAtMillis ?? this.updatedAtMillis,
+    nodeCount: nodeCount ?? this.nodeCount,
+    enabled: enabled ?? this.enabled,
+  );
 }
 
 class StunServerEndpoint {
@@ -155,6 +175,20 @@ class ProfileLibrary {
 
   ServerProfile get selectedProfile =>
       profiles.firstWhere((profile) => profile.id == selectedProfileId);
+
+  List<ServerProfile> get enabledProfiles {
+    final enabledSubscriptionIds = subscriptions
+        .where((source) => source.enabled)
+        .map((source) => source.id)
+        .toSet();
+    return profiles
+        .where(
+          (profile) =>
+              !profile.isSubscriptionManaged ||
+              enabledSubscriptionIds.contains(profile.subscriptionId),
+        )
+        .toList(growable: false);
+  }
 
   factory ProfileLibrary.fromJson(Map<String, Object?> json) => ProfileLibrary(
     schemaVersion: json['schemaVersion'] as int? ?? 1,

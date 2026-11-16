@@ -56,7 +56,12 @@ class ProfileRepository(
 
     fun selectProfile(id: String): ProfileLibrary {
         val current = load()
-        require(current.profiles.any { it.id == id }) { "Profile not found: $id" }
+        val profile = current.profiles.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Profile not found: $id")
+        require(
+            !profile.isSubscriptionManaged ||
+                current.subscriptions.any { it.id == profile.subscriptionId && it.enabled }
+        ) { "Subscription is disabled" }
         return persist(current.copy(selectedProfileId = id))
     }
 
@@ -149,28 +154,79 @@ class ProfileRepository(
             )
         }
         val profiles = current.profiles.filterNot { it.subscriptionId == sourceId } + imported
-        val currentSelection = current.selectedProfile
-        val selectedId = current.selectedProfileId.takeIf { selected ->
-            currentSelection.config.serverHost.isNotBlank() &&
-                profiles.any { it.id == selected }
-        } ?: imported.first().id
         val source = SubscriptionSource(
             id = sourceId,
             name = name.trim(),
             url = url.trim(),
             updatedAtMillis = nowMillis(),
-            nodeCount = imported.size
+            nodeCount = imported.size,
+            enabled = existingSource?.enabled ?: true
         )
         val subscriptions = if (existingSource == null) {
             current.subscriptions + source
         } else {
             current.subscriptions.map { if (it.id == sourceId) source else it }
         }
+        val enabledSubscriptionIds = subscriptions
+            .filter(SubscriptionSource::enabled)
+            .mapTo(mutableSetOf()) { it.id }
+        val availableProfiles = profiles.filter { profile ->
+            !profile.isSubscriptionManaged || profile.subscriptionId in enabledSubscriptionIds
+        }
+        val shouldSelectFirstImported = existingSource == null &&
+            source.enabled &&
+            current.selectedProfile.config.serverHost.isBlank()
+        val selectedId = when {
+            shouldSelectFirstImported -> imported.first().id
+            availableProfiles.any { it.id == current.selectedProfileId } ->
+                current.selectedProfileId
+            else -> availableProfiles.first().id
+        }
         return persist(
             current.copy(
                 profiles = profiles,
                 selectedProfileId = selectedId,
                 subscriptions = subscriptions
+            )
+        )
+    }
+
+    fun setSubscriptionEnabled(
+        id: String,
+        enabled: Boolean,
+        activeProfileId: String = ""
+    ): ProfileLibrary {
+        val current = load()
+        val source = current.subscriptions.firstOrNull { it.id == id }
+            ?: throw IllegalArgumentException("Subscription not found: $id")
+        if (source.enabled == enabled) return current
+        val affectedProfileIds = current.profiles
+            .filter { it.subscriptionId == id }
+            .mapTo(mutableSetOf()) { it.id }
+        if (!enabled) {
+            require(activeProfileId !in affectedProfileIds) {
+                "The active node belongs to this subscription"
+            }
+        }
+        val subscriptions = current.subscriptions.map { item ->
+            if (item.id == id) item.copy(enabled = enabled) else item
+        }
+        val enabledSubscriptionIds = subscriptions
+            .filter(SubscriptionSource::enabled)
+            .mapTo(mutableSetOf()) { it.id }
+        val availableProfiles = current.profiles.filter { profile ->
+            !profile.isSubscriptionManaged || profile.subscriptionId in enabledSubscriptionIds
+        }
+        require(availableProfiles.isNotEmpty()) {
+            "At least one node source must remain enabled"
+        }
+        val selectedId = current.selectedProfileId.takeIf { selected ->
+            availableProfiles.any { it.id == selected }
+        } ?: availableProfiles.first().id
+        return persist(
+            current.copy(
+                subscriptions = subscriptions,
+                selectedProfileId = selectedId
             )
         )
     }
@@ -188,14 +244,21 @@ class ProfileRepository(
         if (profiles.isEmpty()) {
             profiles = listOf(ServerProfile(uniqueId(removedIds), "New node", blankConfig()))
         }
+        val subscriptions = current.subscriptions.filterNot { it.id == id }
+        val enabledSubscriptionIds = subscriptions
+            .filter(SubscriptionSource::enabled)
+            .mapTo(mutableSetOf()) { it.id }
+        val availableProfiles = profiles.filter { profile ->
+            !profile.isSubscriptionManaged || profile.subscriptionId in enabledSubscriptionIds
+        }
         val selectedId = current.selectedProfileId.takeIf { selected ->
-            profiles.any { it.id == selected }
-        } ?: profiles.first().id
+            availableProfiles.any { it.id == selected }
+        } ?: availableProfiles.first().id
         return persist(
             current.copy(
                 profiles = profiles,
                 selectedProfileId = selectedId,
-                subscriptions = current.subscriptions.filterNot { it.id == id }
+                subscriptions = subscriptions
             )
         )
     }
@@ -268,6 +331,13 @@ class ProfileRepository(
             "Duplicate subscription id"
         }
         val subscriptionIds = library.subscriptions.mapTo(mutableSetOf()) { it.id }
+        val selectedProfile = library.profiles.first { it.id == library.selectedProfileId }
+        require(
+            !selectedProfile.isSubscriptionManaged ||
+                library.subscriptions.any {
+                    it.id == selectedProfile.subscriptionId && it.enabled
+                }
+        ) { "Selected profile belongs to a disabled subscription" }
         library.profiles.filter(ServerProfile::isSubscriptionManaged).forEach { profile ->
             require(profile.subscriptionId in subscriptionIds) {
                 "Subscription node has no source"
@@ -373,7 +443,8 @@ class ProfileRepository(
                 name = json.optString("name").trim().ifBlank { "Subscription" },
                 url = json.optString("url"),
                 updatedAtMillis = json.optLong("updatedAtMillis"),
-                nodeCount = json.optInt("nodeCount")
+                nodeCount = json.optInt("nodeCount"),
+                enabled = json.optBoolean("enabled", true)
             )
         }
         val validSubscriptionIds = subscriptions.mapTo(mutableSetOf()) { it.id }

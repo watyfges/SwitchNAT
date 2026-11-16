@@ -154,6 +154,11 @@ class FakeStore implements ConfigStore {
     required List<ImportedSubscriptionNode> nodes,
   }) async => value;
   @override
+  Future<ProfileLibrary> setSubscriptionEnabled(
+    String id,
+    bool enabled,
+  ) async => value;
+  @override
   Future<ProfileLibrary> deleteSubscription(String id) async => value;
   @override
   Future<String> loadDefaultUdpTargets() async => '';

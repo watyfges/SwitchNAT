@@ -46,6 +46,8 @@ void main() {
     expect(library.stunServers.single.enabled, isTrue);
     expect(library.selectedProfile.isSubscriptionManaged, isTrue);
     expect(library.subscriptions.single.nodeCount, 1);
+    expect(library.subscriptions.single.enabled, isTrue);
+    expect(library.enabledProfiles.single.id, 'p1');
     expect(library.themeMode, AppThemePreference.dark);
     expect(library.toJson()['themeMode'], 'dark');
     expect(library.toJson()['selectedProfileId'], 'p1');
