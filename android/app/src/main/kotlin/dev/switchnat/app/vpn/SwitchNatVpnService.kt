@@ -5,6 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
@@ -51,6 +55,10 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
     private var startupThread: Thread? = null
     private var diagnosticsCoordinator: ConnectionDiagnosticsCoordinator? = null
     private var notificationThread: Thread? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val networkLock = Any()
+    private val underlyingNetworks = mutableSetOf<Network>()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -166,8 +174,17 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
                     targets = udpTargets,
                     relaySessionFactory = UdpRelaySessionFactory { udpSessionFactory() },
                     diagnostics = diagnostics,
-                    localAliasAddress = localAliasAddress
+                    localAliasAddress = localAliasAddress,
+                    localAliasAddressCandidates = { switchEndpoint ->
+                        HotspotAddressDetector.addressesForPeer(
+                            HotspotAddressDetector.detectAddressCandidates(),
+                            switchEndpoint.address?.hostAddress.orEmpty()
+                        ).mapNotNull { address ->
+                            runCatching { InetAddress.getByName(address) }.getOrNull()
+                        }
+                    }
                 ).also { it.start() }
+                startNetworkMonitoring()
             }
 
             running = true
@@ -198,6 +215,62 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
             return
         }
         if (tcp) coordinator.runTcpTest() else coordinator.runNatTest()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startNetworkMonitoring() {
+        stopNetworkMonitoring()
+        val manager = getSystemService(ConnectivityManager::class.java)
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        synchronized(networkLock) {
+            underlyingNetworks.clear()
+            manager.allNetworks
+                .filter { network ->
+                    val capabilities = manager.getNetworkCapabilities(network)
+                    capabilities?.hasCapability(
+                        NetworkCapabilities.NET_CAPABILITY_INTERNET
+                    ) == true && capabilities.hasCapability(
+                        NetworkCapabilities.NET_CAPABILITY_NOT_VPN
+                    )
+                }
+                .forEach(underlyingNetworks::add)
+        }
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                val added = synchronized(networkLock) { underlyingNetworks.add(network) }
+                if (added) udpEndpointProxy?.resetFlows("network-changed")
+            }
+
+            override fun onLost(network: Network) {
+                val removed = synchronized(networkLock) { underlyingNetworks.remove(network) }
+                if (removed) udpEndpointProxy?.resetFlows("network-lost")
+            }
+        }
+        runCatching { manager.registerNetworkCallback(request, callback) }
+            .onSuccess {
+                connectivityManager = manager
+                networkCallback = callback
+            }
+            .onFailure { error ->
+                diagnostics.setLastError(
+                    "NETWORK_MONITOR",
+                    error.message ?: error.javaClass.simpleName
+                )
+            }
+    }
+
+    private fun stopNetworkMonitoring() {
+        val manager = connectivityManager
+        val callback = networkCallback
+        connectivityManager = null
+        networkCallback = null
+        synchronized(networkLock) { underlyingNetworks.clear() }
+        if (manager != null && callback != null) {
+            runCatching { manager.unregisterNetworkCallback(callback) }
+        }
     }
 
     private fun detectGateway(): String {
@@ -263,6 +336,7 @@ class SwitchNatVpnService : VpnService(), SocketProtector, TcpSocketProtector {
     }
 
     private fun closeRuntimeResources() {
+        stopNetworkMonitoring()
         notificationThread?.interrupt()
         notificationThread = null
         runCatching { diagnosticsCoordinator?.close() }

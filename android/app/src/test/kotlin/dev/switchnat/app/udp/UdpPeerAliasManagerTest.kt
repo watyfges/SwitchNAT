@@ -273,6 +273,80 @@ class UdpPeerAliasManagerTest {
     }
 
     @Test
+    fun resolvesLocalAddressWhenAliasIsActuallyNeeded() {
+        val diagnostics = Diagnostics()
+        val switchSocket = DatagramSocket(InetSocketAddress("127.0.0.1", 0))
+        val switchEndpoint = switchSocket.localSocketAddress as InetSocketAddress
+        var resolverCalls = 0
+        val manager = UdpPeerAliasManager(
+            localAddress = null,
+            localAddressCandidates = {
+                resolverCalls++
+                listOf(InetAddress.getByName("127.0.0.1"))
+            },
+            diagnostics = diagnostics
+        ).also { it.start() }
+
+        try {
+            manager.forwardInbound(
+                switchEndpoint,
+                switchEndpoint,
+                TargetAddress("198.51.100.70", 19000),
+                byteArrayOf(1),
+                RecordingUdpRelaySender()
+            )
+
+            receivePacket(switchSocket)
+            assertEquals(1, resolverCalls)
+            assertEquals(1, manager.activeAliasCount)
+        } finally {
+            manager.close()
+            switchSocket.close()
+        }
+    }
+
+    @Test
+    fun retriesAliasBindingWithNextResolvedAddress() {
+        val diagnostics = Diagnostics()
+        val switchSocket = DatagramSocket(InetSocketAddress("127.0.0.1", 0))
+        val switchEndpoint = switchSocket.localSocketAddress as InetSocketAddress
+        val attempted = mutableListOf<String>()
+        val manager = UdpPeerAliasManager(
+            localAddress = null,
+            localAddressCandidates = {
+                listOf(
+                    InetAddress.getByName("127.0.0.2"),
+                    InetAddress.getByName("127.0.0.1")
+                )
+            },
+            diagnostics = diagnostics,
+            socketFactory = UdpAliasSocketFactory { localAddress, endpoint ->
+                attempted += localAddress.hostAddress
+                if (localAddress.hostAddress == "127.0.0.2") {
+                    error("simulated stale hotspot address")
+                }
+                DatagramUdpAliasSocketFactory().bind(localAddress, endpoint)
+            }
+        ).also { it.start() }
+
+        try {
+            manager.forwardInbound(
+                switchEndpoint,
+                switchEndpoint,
+                TargetAddress("198.51.100.71", 19001),
+                byteArrayOf(1),
+                RecordingUdpRelaySender()
+            )
+
+            receivePacket(switchSocket)
+            assertEquals(listOf("127.0.0.2", "127.0.0.1"), attempted)
+        } finally {
+            manager.close()
+            switchSocket.close()
+        }
+    }
+
+    @Test
     fun missingLocalAddressFailsOnlyAliasCreation() {
         val diagnostics = Diagnostics()
         val switchEndpoint = InetSocketAddress("127.0.0.1", 20000)

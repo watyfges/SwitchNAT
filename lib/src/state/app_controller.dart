@@ -29,6 +29,9 @@ class AppController extends ChangeNotifier {
   bool get isRunning =>
       status.state == VpnRunState.running ||
       status.state == VpnRunState.starting;
+  bool get isTransitioning =>
+      status.state == VpnRunState.starting ||
+      status.state == VpnRunState.stopping;
   bool get hasPendingProfileChange =>
       isRunning &&
       status.activeProfileId.isNotEmpty &&

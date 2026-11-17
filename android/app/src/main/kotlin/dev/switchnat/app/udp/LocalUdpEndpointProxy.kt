@@ -23,14 +23,18 @@ class LocalUdpEndpointProxy(
     private val relaySessionFactory: UdpRelaySessionFactory,
     private val diagnostics: Diagnostics,
     private val localAliasAddress: InetAddress? = null,
+    private val localAliasAddressCandidates: ((InetSocketAddress) -> List<InetAddress>)? = null,
     private val socketFactory: LocalUdpSocketFactory = DatagramLocalUdpSocketFactory(),
-    private val clock: () -> Long = { System.currentTimeMillis() }
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    private val flowIdleTimeoutMillis: Long = DEFAULT_FLOW_IDLE_TIMEOUT_MILLIS
 ) : AutoCloseable {
     private val endpoints = mutableListOf<LocalUdpEndpoint>()
     private val endpointsByTarget = ConcurrentHashMap<TargetAddress, LocalUdpEndpoint>()
     private val flows = ConcurrentHashMap<InetSocketAddress, Flow>()
+    private val flowLock = Any()
     private val aliasManager = UdpPeerAliasManager(
         localAddress = localAliasAddress,
+        localAddressCandidates = localAliasAddressCandidates,
         diagnostics = diagnostics,
         clock = clock,
         onRelayFailure = ::closeFlowBySender
@@ -38,6 +42,10 @@ class LocalUdpEndpointProxy(
 
     @Volatile
     private var running = false
+
+    init {
+        require(flowIdleTimeoutMillis > 0) { "flowIdleTimeoutMillis must be positive" }
+    }
 
     fun start() {
         if (running) return
@@ -89,11 +97,12 @@ class LocalUdpEndpointProxy(
         diagnostics.incrementUdpRead()
         diagnostics.incrementUdpAccepted()
         sender.address?.hostAddress?.let(diagnostics::recordSwitchActivity)
-        val flow = flows.computeIfAbsent(sender) { createFlow(sender) }
+        val flow = flowFor(sender)
         diagnostics.setActiveMappings(flows.size)
         diagnostics.setActiveUdpFlows(flows.size)
         try {
             flow.send(endpoint.target, payload)
+            flow.lastActivityMillis = clock()
         } catch (error: Throwable) {
             diagnostics.setLastError(
                 "SS_UDP_SEND",
@@ -115,9 +124,40 @@ class LocalUdpEndpointProxy(
         )
     }
 
-    private fun createFlow(sender: InetSocketAddress): Flow {
+    private fun flowFor(sender: InetSocketAddress): Flow {
+        val now = clock()
+        var stale: Flow? = null
+        val flow = synchronized(flowLock) {
+            val current = flows[sender]
+            if (current != null && now - current.lastActivityMillis <= flowIdleTimeoutMillis) {
+                current
+            } else {
+                val replacement = createFlow(sender, now)
+                if (current != null) stale = current
+                flows[sender] = replacement
+                replacement
+            }
+        }
+        stale?.let { expired ->
+            aliasManager.closeFlow(sender)
+            closeFlowResources(expired)
+            diagnostics.addSample(
+                PacketSample(
+                    timestampMillis = now,
+                    protocol = "UDP",
+                    source = sender.toString(),
+                    destination = "relay",
+                    direction = "internal",
+                    outcome = "flow-recreated"
+                )
+            )
+        }
+        return flow
+    }
+
+    private fun createFlow(sender: InetSocketAddress, now: Long): Flow {
         val session = relaySessionFactory.open()
-        val flow = Flow(sender, session)
+        val flow = Flow(sender, session, lastActivityMillis = now)
         flow.thread = thread(
             name = "SwitchNAT-UDP-Flow-${sender.address.hostAddress}-${sender.port}",
             isDaemon = true,
@@ -132,6 +172,7 @@ class LocalUdpEndpointProxy(
         while (running) {
             try {
                 val decoded = flow.session.receive()
+                flow.lastActivityMillis = clock()
                 sendBackToSwitch(flow, decoded)
             } catch (error: SocketException) {
                 if (running && flows[flow.sender] === flow) {
@@ -202,10 +243,42 @@ class LocalUdpEndpointProxy(
     }
 
     private fun closeFlow(sender: InetSocketAddress, expected: Flow) {
-        if (!flows.remove(sender, expected)) return
+        val removed = synchronized(flowLock) { flows.remove(sender, expected) }
+        if (!removed) return
         aliasManager.closeFlow(sender)
-        runCatching { expected.session.close() }
-        expected.thread?.takeIf { it !== Thread.currentThread() }?.interrupt()
+        closeFlowResources(expected)
+        updateFlowCounts()
+    }
+
+    private fun closeFlowResources(flow: Flow) {
+        runCatching { flow.session.close() }
+        flow.thread?.takeIf { it !== Thread.currentThread() }?.interrupt()
+    }
+
+    fun resetFlows(reason: String = "manual") {
+        val removed = synchronized(flowLock) {
+            flows.values.toList().also { flows.clear() }
+        }
+        removed.forEach { flow ->
+            aliasManager.closeFlow(flow.sender)
+            closeFlowResources(flow)
+        }
+        if (removed.isNotEmpty()) {
+            diagnostics.addSample(
+                PacketSample(
+                    timestampMillis = clock(),
+                    protocol = "UDP",
+                    source = "relay",
+                    destination = "relay",
+                    direction = "internal",
+                    outcome = "flows-reset-" + reason
+                )
+            )
+        }
+        updateFlowCounts()
+    }
+
+    private fun updateFlowCounts() {
         diagnostics.setActiveMappings(flows.size)
         diagnostics.setActiveUdpFlows(flows.size)
     }
@@ -217,11 +290,7 @@ class LocalUdpEndpointProxy(
     override fun close() {
         running = false
         aliasManager.close()
-        flows.values.forEach { flow ->
-            runCatching { flow.session.close() }
-            flow.thread?.interrupt()
-        }
-        flows.clear()
+        resetFlows("shutdown")
         endpoints.forEach { endpoint ->
             runCatching { endpoint.socket.close() }
             endpoint.thread?.interrupt()
@@ -241,6 +310,7 @@ class LocalUdpEndpointProxy(
     private class Flow(
         val sender: InetSocketAddress,
         val session: UdpRelaySession,
+        @Volatile var lastActivityMillis: Long,
         var thread: Thread? = null
     ) : UdpRelaySender {
         private val sendLock = Any()
@@ -254,6 +324,7 @@ class LocalUdpEndpointProxy(
 
     private companion object {
         const val MAX_UDP_PACKET_SIZE = 65_535
+        const val DEFAULT_FLOW_IDLE_TIMEOUT_MILLIS = 60_000L
     }
 }
 

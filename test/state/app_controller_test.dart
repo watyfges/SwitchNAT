@@ -23,6 +23,25 @@ void main() {
     controller.dispose();
   });
 
+  test('starting and stopping are treated as transitions', () async {
+    final bridge = FakeBridge();
+    final controller = AppController(bridge: bridge, store: FakeStore(library));
+    await controller.initialize();
+
+    bridge.emit(<Object?, Object?>{'state': 'starting'});
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.isTransitioning, isTrue);
+
+    bridge.emit(<Object?, Object?>{'state': 'stopping'});
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.isTransitioning, isTrue);
+
+    bridge.emit(<Object?, Object?>{'state': 'stopped'});
+    await Future<void>.delayed(Duration.zero);
+    expect(controller.isTransitioning, isFalse);
+    controller.dispose();
+  });
+
   test(
     'selecting while running records pending mismatch without restart',
     () async {

@@ -43,6 +43,7 @@ class DatagramUdpAliasSocketFactory : UdpAliasSocketFactory {
 
 class UdpPeerAliasManager(
     private val localAddress: InetAddress?,
+    private val localAddressCandidates: ((InetSocketAddress) -> List<InetAddress>)? = null,
     private val diagnostics: Diagnostics,
     private val socketFactory: UdpAliasSocketFactory = DatagramUdpAliasSocketFactory(),
     private val clock: () -> Long = { System.currentTimeMillis() },
@@ -218,14 +219,34 @@ class UdpPeerAliasManager(
         switchEndpoint: InetSocketAddress,
         relaySender: UdpRelaySender
     ): UdpPeerAlias {
-        val bindAddress = localAddress ?: run {
+        val resolved = runCatching {
+            localAddressCandidates?.invoke(switchEndpoint).orEmpty()
+        }.getOrElse { error ->
+            diagnostics.setLastError(
+                "UDP_ALIAS_BIND",
+                error.message ?: error.javaClass.simpleName
+            )
+            throw error
+        }
+        val bindAddresses = (resolved + listOfNotNull(localAddress))
+            .distinctBy { it.hostAddress }
+        if (bindAddresses.isEmpty()) {
             val message = "No Switch-reachable local address"
             diagnostics.setLastError("UDP_ALIAS_BIND", message)
             throw IllegalStateException(message)
         }
-        val socket = try {
-            socketFactory.bind(bindAddress, switchEndpoint)
-        } catch (error: Throwable) {
+        var lastError: Throwable? = null
+        var socket: DatagramSocket? = null
+        for (bindAddress in bindAddresses) {
+            try {
+                socket = socketFactory.bind(bindAddress, switchEndpoint)
+                break
+            } catch (error: Throwable) {
+                lastError = error
+            }
+        }
+        val boundSocket = socket ?: run {
+            val error = lastError ?: IllegalStateException("No Switch-reachable local address")
             diagnostics.setLastError(
                 "UDP_ALIAS_BIND",
                 error.message ?: error.javaClass.simpleName
@@ -235,8 +256,8 @@ class UdpPeerAliasManager(
         return UdpPeerAlias(
             key = key,
             switchEndpoint = switchEndpoint,
-            localEndpoint = socket.localSocketAddress as InetSocketAddress,
-            socket = socket,
+            localEndpoint = boundSocket.localSocketAddress as InetSocketAddress,
+            socket = boundSocket,
             relaySender = relaySender,
             lastActivityMillis = clock()
         )

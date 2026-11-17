@@ -6,6 +6,7 @@ import dev.switchnat.app.ss.TargetAddress
 import dev.switchnat.app.ss.UdpRelaySession
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -183,6 +184,83 @@ class LocalUdpEndpointProxyTest {
     }
 
     @Test
+    fun idleSwitchFlowIsRecreatedBeforeForwardingTheNextPacket() {
+        var now = 1_000L
+        val sessions = mutableListOf<FakeUdpRelaySession>()
+        val target = TargetAddress("127.0.0.2", 8123)
+        val proxy = LocalUdpEndpointProxy(
+            targets = listOf(target),
+            relaySessionFactory = object : UdpRelaySessionFactory {
+                override fun open(): UdpRelaySession {
+                    return FakeUdpRelaySession().also { sessions += it }
+                }
+            },
+            diagnostics = Diagnostics(),
+            clock = { now },
+            flowIdleTimeoutMillis = 1_000L
+        )
+        proxy.start()
+
+        val switchSocket = DatagramSocket()
+        try {
+            switchSocket.send(
+                DatagramPacket(byteArrayOf(1), 1, InetSocketAddress(target.host, target.port))
+            )
+            waitUntil { sessions.singleOrNull()?.sent?.size == 1 }
+
+            now += 1_001L
+            switchSocket.send(
+                DatagramPacket(byteArrayOf(2), 1, InetSocketAddress(target.host, target.port))
+            )
+            waitUntil { sessions.size == 2 && sessions.last().sent.size == 1 }
+
+            assertTrue(sessions.first().closed)
+            assertArrayEquals(byteArrayOf(2), sessions.last().sent.single().second)
+        } finally {
+            proxy.close()
+            switchSocket.close()
+        }
+    }
+
+    @Test
+    fun resettingFlowsClosesSessionsAndNextPacketCreatesANewSession() {
+        val sessions = mutableListOf<FakeUdpRelaySession>()
+        val target = TargetAddress("127.0.0.2", 8123)
+        val diagnostics = Diagnostics()
+        val proxy = LocalUdpEndpointProxy(
+            targets = listOf(target),
+            relaySessionFactory = object : UdpRelaySessionFactory {
+                override fun open(): UdpRelaySession {
+                    return FakeUdpRelaySession().also { sessions += it }
+                }
+            },
+            diagnostics = diagnostics
+        )
+        proxy.start()
+
+        val switchSocket = DatagramSocket()
+        try {
+            switchSocket.send(
+                DatagramPacket(byteArrayOf(1), 1, InetSocketAddress(target.host, target.port))
+            )
+            waitUntil { sessions.singleOrNull()?.sent?.size == 1 }
+
+            proxy.resetFlows("test")
+            assertTrue(sessions.first().closed)
+            assertEquals(0, diagnostics.snapshot().activeUdpFlows)
+
+            switchSocket.send(
+                DatagramPacket(byteArrayOf(2), 1, InetSocketAddress(target.host, target.port))
+            )
+            waitUntil { sessions.size == 2 && sessions.last().sent.size == 1 }
+            assertArrayEquals(byteArrayOf(2), sessions.last().sent.single().second)
+        } finally {
+            proxy.close()
+            switchSocket.close()
+        }
+    }
+
+    @Test
     fun aliasBindFailureDropsOnlyDynamicPacketAndKeepsRelayFlowUsable() {
         val sessions = mutableListOf<FakeUdpRelaySession>()
         val primaryTarget = TargetAddress("127.0.0.2", 8123)
@@ -304,7 +382,9 @@ private class FakeUdpRelaySession : UdpRelaySession {
     @Volatile
     var nextSendError: Throwable? = null
     private val inbound = ArrayDeque<DecodedUdpPacket>()
-    private var closed = false
+    @Volatile
+    var closed = false
+        private set
 
     override fun send(target: TargetAddress, payload: ByteArray) {
         nextSendError?.let {

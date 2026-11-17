@@ -5,7 +5,8 @@ import java.net.NetworkInterface
 
 data class HotspotAddressCandidate(
     val interfaceName: String,
-    val address: String
+    val address: String,
+    val prefixLength: Int = 32
 )
 
 object HotspotAddressDetector {
@@ -20,12 +21,16 @@ object HotspotAddressDetector {
                 .orEmpty()
                 .filter { it.isUp && !it.isLoopback && !it.name.startsWith("tun") }
                 .flatMap { networkInterface ->
-                    networkInterface.inetAddresses
-                        .toList()
-                        .filterIsInstance<Inet4Address>()
-                        .mapNotNull { address ->
+                    networkInterface.interfaceAddresses
+                        .mapNotNull { interfaceAddress ->
+                            val address = interfaceAddress.address as? Inet4Address
+                                ?: return@mapNotNull null
                             address.hostAddress?.let {
-                                HotspotAddressCandidate(networkInterface.name, it)
+                                HotspotAddressCandidate(
+                                    networkInterface.name,
+                                    it,
+                                    interfaceAddress.networkPrefixLength.toInt()
+                                )
                             }
                         }
                 }
@@ -39,10 +44,51 @@ object HotspotAddressDetector {
     }
 
     fun chooseGatewayFromAddressCandidates(candidates: List<HotspotAddressCandidate>): String {
+        return addressesForPeer(candidates, "").firstOrNull().orEmpty()
+    }
+
+    fun addressesForPeer(
+        candidates: List<HotspotAddressCandidate>,
+        peerAddress: String
+    ): List<String> {
         val privateCandidates = candidates.filter { isPrivate(it.address) }
-        val hotspotCandidates = privateCandidates.filter { isHotspotInterface(it.interfaceName) }
-        return chooseAddress(hotspotCandidates.map { it.address })
-            .ifBlank { chooseAddress(privateCandidates.map { it.address }) }
+        val peer = ipv4Value(peerAddress)
+        val sameSubnet = if (peer == null) {
+            emptyList()
+        } else {
+            privateCandidates.filter { sharesSubnet(it, peer) }
+        }
+        val primary = sameSubnet.ifEmpty { privateCandidates }
+        val orderedPrimary = orderCandidates(primary)
+        val orderedFallback = if (sameSubnet.isEmpty()) {
+            emptyList()
+        } else {
+            orderCandidates(privateCandidates.filterNot(sameSubnet::contains))
+        }
+        return (orderedPrimary + orderedFallback)
+            .map { it.address }
+            .distinct()
+    }
+
+    private fun orderCandidates(
+        candidates: List<HotspotAddressCandidate>
+    ): List<HotspotAddressCandidate> {
+        val hotspot = candidates.filter { isHotspotInterface(it.interfaceName) }
+        val other = candidates.filterNot { isHotspotInterface(it.interfaceName) }
+        return orderByGatewayPreference(hotspot) + orderByGatewayPreference(other)
+    }
+
+    private fun orderByGatewayPreference(
+        candidates: List<HotspotAddressCandidate>
+    ): List<HotspotAddressCandidate> {
+        return candidates.withIndex()
+            .sortedWith(
+                compareByDescending<IndexedValue<HotspotAddressCandidate>> {
+                    it.value.prefixLength
+                }.thenBy { gatewayRank(it.value.address) }
+                    .thenBy { it.index }
+            )
+            .map { it.value }
     }
 
     private fun chooseAddress(privateCandidates: List<String>): String {
@@ -66,6 +112,31 @@ object HotspotAddressDetector {
         if (!interfaceName.startsWith("wlan")) return false
         val index = interfaceName.removePrefix("wlan").toIntOrNull() ?: return false
         return index > 0
+    }
+
+    private fun sharesSubnet(candidate: HotspotAddressCandidate, peer: Long): Boolean {
+        val address = ipv4Value(candidate.address) ?: return false
+        val prefix = candidate.prefixLength
+        if (prefix !in 0..32) return false
+        val mask = if (prefix == 0) {
+            0L
+        } else {
+            (0xffff_ffffL shl (32 - prefix)) and 0xffff_ffffL
+        }
+        return address and mask == peer and mask
+    }
+
+    private fun ipv4Value(ip: String): Long? {
+        val parts = ip.split(".").map { it.toIntOrNull() ?: return null }
+        if (parts.size != IPV4_OCTETS || parts.any { it !in 0..255 }) return null
+        return parts.fold(0L) { value, part -> (value shl 8) or part.toLong() }
+    }
+
+    private fun gatewayRank(ip: String): Int = when {
+        ip.startsWith("192.168.") && ip.endsWith(".1") -> 0
+        isPrivate172(ip) && ip.endsWith(".1") -> 1
+        ip.startsWith("10.") && ip.endsWith(".1") -> 2
+        else -> 3
     }
 
     private fun isPrivate(ip: String): Boolean {

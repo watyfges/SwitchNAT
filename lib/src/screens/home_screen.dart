@@ -59,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                   IconButton.filled(
                     key: const Key('master-switch'),
-                    onPressed: controller.busy
+                    onPressed: controller.busy || controller.isTransitioning
                         ? null
                         : (on ? controller.stop : controller.start),
                     iconSize: 32,
