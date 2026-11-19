@@ -2,7 +2,7 @@
 
 English | [简体中文](TECHNICAL_DESIGN.md)
 
-This document describes the current <code>master</code> implementation boundary. It explains how the code works and does not promise identical results across devices, networks, or games.
+This document describes the current <code>main</code> implementation boundary. It explains how the code works and does not promise identical results across devices, networks, or games.
 
 ## 1. Goals and Non-Goals
 
